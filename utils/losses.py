@@ -45,7 +45,7 @@ class mse_loss(nn.Module):
         :return: Loss value
         """
 
-        return t.nn.MSELoss(forecast, target)
+        return t.nn.MSELoss()(forecast, target)
 
 
 class mape_loss(nn.Module):

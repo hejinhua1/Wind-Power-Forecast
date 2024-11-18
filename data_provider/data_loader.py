@@ -43,6 +43,11 @@ class Dataset_WindPower(Dataset):
         self.timeenc = timeenc
         self.freq = freq
         self.id = id
+        id_caps = {0:400, 4:400, 6:300, 7:300, 9:300, 10:300, 14:250, 16:245, 17:500}
+        if self.id is None:
+            self.id_caps = id_caps
+        else:
+            self.id_caps = {i: id_caps[i] for i in self.id if i in id_caps}
 
         self.root_path = root_path
         self.data_path = data_path
@@ -58,6 +63,8 @@ class Dataset_WindPower(Dataset):
         df_raw = df_raw.drop(columns=['predict_duration'])
         # rename the TIMESTAMP column
         df_raw = df_raw.rename(columns={'TIMESTAMP': 'date'})
+        if df_raw.isna().any().any():
+            df_raw = df_raw.fillna(df_raw.mean())
 
         # scale NWP data and target data if needed
         self.scaler = StandardScaler()
@@ -133,11 +140,12 @@ class Dataset_WindPower(Dataset):
         return len(self.data_x) - self.seq_len - self.pred_len + 1
 
     def inverse_transform(self, data):
-        return self.scaler.inverse_transform(data)
+        out = data * self.scaler.scale_[-1] + self.scaler.mean_[-1]
+        return out
 
 
 if __name__ == '__main__':
     dataset = Dataset_WindPower(args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data.feather',
-                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None)
+                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
     print(len(dataset))

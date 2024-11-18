@@ -13,16 +13,16 @@ class Config:
         # 基本配置
         self.task_name = 'long_term_forecast' # 'imputation', 'short_term_forecast', 'long_term_forecast', 'anomaly_detection', 'classification'
         self.is_training = 1
-        self.model_id = 'ElcPrice_96_96'
+        self.model_id = 'WindPower_96_96'
         self.model = 'Informer'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer'
         self.des = 'Exp'
 
         # 数据加载
-        self.data = 'ElcPrice'
+        self.data = 'WindPower'
         self.root_path = './data/'
-        self.data_path = 'full_data.feather'
-        self.features = 'MS'
-        self.target = 'dayahead_clearing_price'
+        self.data_path = 'data.feather'
+        self.features = 'M'
+        self.target = 'power_unit'
         self.freq = 't'
         self.checkpoints = './checkpoints/'
 
@@ -44,9 +44,9 @@ class Config:
         self.d_conv = 4
         self.top_k = 5
         self.num_kernels = 6
-        self.enc_in = 8
-        self.dec_in = 8
-        self.c_out = 8
+        self.enc_in = 54
+        self.dec_in = 54
+        self.c_out = 54
         self.d_model = 16
         self.n_heads = 8
         self.e_layers = 2
@@ -74,7 +74,7 @@ class Config:
         self.patience = 3
         self.learning_rate = 0.0001
         self.des = 'test'
-        self.loss = 'MAPE'
+        self.loss = 'MSE'
         self.lradj = 'type1'
         self.use_amp = False
 
@@ -149,7 +149,7 @@ if __name__ == '__main__':
         for ii in range(args.itr):
             # setting record of experiments
             exp = Exp(args)  # set experiments
-            setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
+            setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_bs{}_ls{}_{}'.format(
                 args.task_name,
                 args.model_id,
                 args.model,
@@ -168,7 +168,9 @@ if __name__ == '__main__':
                 args.factor,
                 args.embed,
                 args.distil,
-                args.des, ii)
+                args.des,
+                args.batch_size,
+                args.loss, ii)
 
             print('>>>>>>>start training : {}>>>>>>>>>>>>>>>>>>>>>>>>>>'.format(setting))
             exp.train(setting)
@@ -178,7 +180,7 @@ if __name__ == '__main__':
             torch.cuda.empty_cache()
     else:
         ii = 0
-        setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_{}'.format(
+        setting = '{}_{}_{}_{}_ft{}_sl{}_ll{}_pl{}_dm{}_nh{}_el{}_dl{}_df{}_expand{}_dc{}_fc{}_eb{}_dt{}_{}_bs{}_ls{}_{}'.format(
             args.task_name,
             args.model_id,
             args.model,
@@ -197,10 +199,11 @@ if __name__ == '__main__':
             args.factor,
             args.embed,
             args.distil,
-            args.des, ii)
+            args.des,
+            args.batch_size,
+            args.loss, ii)
 
         exp = Exp(args)  # set experiments
         print('>>>>>>>testing : {}<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<'.format(setting))
         exp.test(setting, test=1)
         torch.cuda.empty_cache()
-

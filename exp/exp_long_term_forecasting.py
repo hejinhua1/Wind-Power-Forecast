@@ -49,13 +49,24 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         elif loss_name == 'Diff':
             return DiffLoss()
 
+    def _set_mask(self):
+        # 保留 5, 11, 17, ..., 53 的位置
+        keep_indices = np.arange(0, 54, 6)
+        # 生成所有索引的布尔数组，初始化为 True
+        mask = np.ones(54, dtype=bool)
+        # 将 5, 11, 17, ..., 53 的索引位置设置为 False
+        mask[keep_indices] = False
+        return mask
+
+
     def vali(self, vali_data, vali_loader, criterion):
         total_loss = []
         self.model.eval()
         mse = nn.MSELoss()
+        mask = self._set_mask()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(vali_loader):
-                batch_x[:, :, :-1] = batch_y[:, -self.args.pred_len:, :-1]
+                batch_x[:, :, mask] = batch_y[:, -self.args.pred_len:, mask]
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
 
@@ -71,9 +82,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                outputs = outputs[:, -self.args.pred_len:, ~mask]
+                batch_y = batch_y[:, -self.args.pred_len:, ~mask].to(self.device)
 
                 pred = outputs.detach().cpu()
                 true = batch_y.detach().cpu()
@@ -90,6 +100,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         vali_data, vali_loader = self._get_data(flag='val')
         test_data, test_loader = self._get_data(flag='test')
 
+        mask = self._set_mask()
         path = os.path.join(self.args.checkpoints, setting)
         if not os.path.exists(path):
             os.makedirs(path)
@@ -115,7 +126,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(train_loader):
                 iter_count += 1
                 model_optim.zero_grad()
-                batch_x[:, :, :-1] = batch_y[:, -self.args.pred_len:, :-1]
+                batch_x[:, :, mask] = batch_y[:, -self.args.pred_len:, mask]
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_x_mark = batch_x_mark.float().to(self.device)
@@ -130,17 +141,14 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                     with torch.cuda.amp.autocast():
                         outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                        f_dim = -1 if self.args.features == 'MS' else 0
-                        outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                        batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                        outputs = outputs[:, -self.args.pred_len:, ~mask]
+                        batch_y = batch_y[:, -self.args.pred_len:, ~mask].to(self.device)
                         loss = criterion(0, 0, outputs, batch_y, torch.ones_like(batch_y))
                         train_loss.append(loss.item())
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
-
-                    f_dim = -1 if self.args.features == 'MS' else 0
-                    outputs = outputs[:, -self.args.pred_len:, f_dim:]
-                    batch_y = batch_y[:, -self.args.pred_len:, f_dim:].to(self.device)
+                    outputs = outputs[:, -self.args.pred_len:, ~mask]
+                    batch_y = batch_y[:, -self.args.pred_len:, ~mask].to(self.device)
                     loss = criterion(0, 0, outputs, batch_y, torch.ones_like(batch_y))
                     train_loss.append(loss.item())
 
@@ -190,11 +198,12 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         folder_path = './test_results/' + setting + '/'
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
+        mask = self._set_mask()
 
         self.model.eval()
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_x_mark, batch_y_mark) in enumerate(test_loader):
-                batch_x[:, :, :-1] = batch_y[:, -self.args.pred_len:, :-1]
+                batch_x[:, :, mask] = batch_y[:, -self.args.pred_len:, mask]
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
 
@@ -211,21 +220,15 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 else:
                     outputs = self.model(batch_x, batch_x_mark, dec_inp, batch_y_mark)
 
-                f_dim = -1 if self.args.features == 'MS' else 0
-                outputs = outputs[:, -self.args.pred_len:, :]
-                batch_y = batch_y[:, -self.args.pred_len:, :].to(self.device)
+                outputs = outputs[:, -self.args.pred_len:, ~mask]
+                batch_y = batch_y[:, -self.args.pred_len:, ~mask].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
                 batch_y = batch_y.detach().cpu().numpy()
+
                 if test_data.scale and self.args.inverse:
-                    shape = outputs.shape
-                    # for MS, some model output may have multiple dimensions, we need to repeat the outputs to match the target
-                    if shape[2] == 1 and batch_y.shape[2] > 1:
-                        outputs = np.repeat(outputs, batch_y.shape[2], axis=2)
-                    outputs = test_data.inverse_transform(outputs.reshape(shape[0] * shape[1], -1)).reshape(batch_y.shape)
-                    batch_y = test_data.inverse_transform(batch_y.reshape(shape[0] * shape[1], -1)).reshape(batch_y.shape)
+                    outputs = test_data.inverse_transform(outputs)
+                    batch_y = test_data.inverse_transform(batch_y)
         
-                outputs = outputs[:, :, f_dim:]
-                batch_y = batch_y[:, :, f_dim:]
 
                 pred = outputs
                 true = batch_y
