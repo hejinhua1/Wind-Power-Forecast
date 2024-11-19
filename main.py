@@ -82,7 +82,7 @@ class Config:
         self.use_gpu = True
         self.gpu = 0
         self.use_multi_gpu = False
-        self.devices = '0,1,2,3'
+        self.devices = '0,1'
 
         # 去平稳投影器参数
         self.p_hidden_dims = [128, 128]

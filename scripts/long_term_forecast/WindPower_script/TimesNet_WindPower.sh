@@ -7,7 +7,7 @@ python -u run.py \
   --is_training 1 \
   --root_path ./data/ \
   --data_path full_data.feather \
-  --model_id ElcPrice_96_96 \
+  --model_id WindPower_96_96 \
   --model $model_name \
   --data ElcPrice \
   --features MS \

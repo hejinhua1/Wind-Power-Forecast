@@ -51,7 +51,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
     def _set_mask(self):
         # 保留 5, 11, 17, ..., 53 的位置
-        keep_indices = np.arange(0, 54, 6)
+        keep_indices = np.arange(5, 54, 6)
         # 生成所有索引的布尔数组，初始化为 True
         mask = np.ones(54, dtype=bool)
         # 将 5, 11, 17, ..., 53 的索引位置设置为 False
@@ -199,6 +199,8 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         mask = self._set_mask()
+        print(mask)
+        print(~mask)
 
         self.model.eval()
         with torch.no_grad():
@@ -238,8 +240,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
                 if i % 20 == 0:
                     input = batch_x.detach().cpu().numpy()
                     if test_data.scale and self.args.inverse:
-                        shape = input.shape
-                        input = test_data.inverse_transform(input.reshape(shape[0] * shape[1], -1)).reshape(shape)
+                        input = test_data.inverse_transform(input)
                     gt = np.concatenate((input[0, :, -1], true[0, :, -1]), axis=0)
                     pd = np.concatenate((input[0, :, -1], pred[0, :, -1]), axis=0)
                     visual(gt, pd, os.path.join(folder_path, str(i) + '.pdf'))

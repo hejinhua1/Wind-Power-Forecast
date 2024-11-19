@@ -139,3 +139,5 @@ logs/
 vision/
 dataset/
 data/
+results/
+test_results/
