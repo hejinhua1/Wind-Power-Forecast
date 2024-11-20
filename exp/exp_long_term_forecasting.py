@@ -199,8 +199,6 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
         mask = self._set_mask()
-        print(mask)
-        print(~mask)
 
         self.model.eval()
         with torch.no_grad():

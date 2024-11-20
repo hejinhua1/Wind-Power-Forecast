@@ -1,42 +1,36 @@
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm16_nh8_el2_dl1_df32_expand2_dc4_fc3_ebtimeF_dtTrue_test_bs32_lsMAPE_0  
-mse:nan, mae:nan, rmse:nan, mape:nan, mspe:nan, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm16_nh8_el2_dl1_df32_expand2_dc4_fc3_ebtimeF_dtTrue_test_bs32_lsMSE_0  
-mse:0.0366, mae:0.1401, rmse:0.1913, mape:1.8996, mspe:138.4675, dtw:not calculated
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs4_lsDiff_0
+mse:0.0415, mae:0.1319, rmse:0.2037, mape:248161.3750, mspe:1994875207680.0000, dtw:not calculated
 
 long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs4_lsDiff_0  
-mse:0.0207, mae:0.0986, rmse:0.1439, mape:1.7581, mspe:93.5016, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs8_lsDiff_0  
-mse:0.0198, mae:0.0969, rmse:0.1405, mape:1.6388, mspe:80.0002, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs4_lsDiff_0  
-mse:0.0402, mae:0.1354, rmse:0.2006, mape:2.3498, mspe:177.5302, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs16_lsDiff_0  
-mse:0.0190, mae:0.0939, rmse:0.1377, mape:1.6761, mspe:87.9164, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsDiff_0  
-mse:0.0207, mae:0.0997, rmse:0.1437, mape:1.5776, mspe:72.1203, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs64_lsDiff_0  
-mse:0.0184, mae:0.0952, rmse:0.1358, mape:1.5589, mspe:73.4897, dtw:not calculated
-
-long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs128_lsDiff_0  
-mse:0.0194, mae:0.0964, rmse:0.1394, mape:1.6067, mspe:75.1001, dtw:not calculated
+mse:0.0309, mae:0.1145, rmse:0.1757, mape:420161.6250, mspe:5661059448832.0000, dtw:not calculated
 
 long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs8_lsDiff_0  
-mse:0.0396, mae:0.1348, rmse:0.1990, mape:2.3736, mspe:183.3201, dtw:not calculated
+mse:0.0415, mae:0.1323, rmse:0.2038, mape:254887.1250, mspe:2058734927872.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs8_lsDiff_0  
+mse:0.0298, mae:0.1120, rmse:0.1725, mape:429966.3438, mspe:5669915197440.0000, dtw:not calculated
 
 long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs16_lsDiff_0  
-mse:0.0397, mae:0.1343, rmse:0.1992, mape:2.3358, mspe:173.7635, dtw:not calculated
+mse:0.0416, mae:0.1328, rmse:0.2040, mape:258296.2031, mspe:2134485237760.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs16_lsDiff_0  
+mse:0.0302, mae:0.1157, rmse:0.1738, mape:432841.1562, mspe:5319365230592.0000, dtw:not calculated
 
 long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs32_lsDiff_0  
-mse:0.0390, mae:0.1329, rmse:0.1976, mape:2.3130, mspe:171.7823, dtw:not calculated
+mse:0.0417, mae:0.1329, rmse:0.2043, mape:255197.7344, mspe:2088882012160.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsDiff_0  
+mse:0.0295, mae:0.1147, rmse:0.1718, mape:422563.9375, mspe:5010491441152.0000, dtw:not calculated
 
 long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs64_lsDiff_0  
-mse:0.0400, mae:0.1346, rmse:0.2000, mape:2.3371, mspe:174.1281, dtw:not calculated
+mse:0.0420, mae:0.1331, rmse:0.2050, mape:256165.1719, mspe:2130363154432.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs64_lsDiff_0  
+mse:0.0289, mae:0.1132, rmse:0.1701, mape:416866.4375, mspe:5163062919168.0000, dtw:not calculated
 
 long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs128_lsDiff_0  
-mse:0.0403, mae:0.1360, rmse:0.2007, mape:2.3625, mspe:178.0514, dtw:not calculated
+mse:0.0423, mae:0.1328, rmse:0.2057, mape:246624.0000, mspe:2006796861440.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs128_lsDiff_0  
+mse:0.0287, mae:0.1128, rmse:0.1693, mape:406095.1562, mspe:4855371399168.0000, dtw:not calculated
 
