@@ -7,6 +7,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
+from datetime import datetime,timedelta
 from sktime.datasets import load_from_tsfile_to_dataframe
 import warnings
 from utils.augmentation import run_augmentation_single
@@ -60,7 +61,8 @@ class Dataset_WindPower(Dataset):
         # remove the prediction duration column
         df_raw = df_raw.drop(columns=['predict_duration'])
         # rename the TIMESTAMP column
-        df_raw = df_raw.rename(columns={'TIMESTAMP': 'date'})
+        df_raw = df_raw.rename(columns={'TIMESTAMP': 'date', '10': 'wind_speed', '4': 'wind_direction',
+                                        '5': 'temperature', '6': 'humidity', '7': 'air_pressure'})
         if df_raw.isna().any().any():
             df_raw = df_raw.fillna(df_raw.mean())
 
@@ -142,8 +144,169 @@ class Dataset_WindPower(Dataset):
         return out
 
 
+
+class StaticData:
+    def __init__(self):
+        self.Typhoons = {
+            'mulan': ['2022-08-09', '2022-08-11'],
+            'ma-on': ['2022-08-16', '2022-08-23'],
+            'nalgae': ['2022-10-31', '2022-11-03'],
+            'talim': ['2023-07-17', '2023-07-19'],
+            'saola': ['2023-08-31', '2023-09-03'],
+            'koinu': ['2023-10-06', '2023-10-08'],
+            'maliksi': ['2024-05-31', '2024-06-01'],
+            'yagi': ['2024-09-05', '2024-09-07']
+        }
+        self.caps = {0: 400, 4: 400, 6: 300, 7: 300, 9: 300, 10: 300, 14: 250, 16: 245, 17: 500}
+
+        self.mean = {'wind_speed': 7.686432, 'wind_direction': 113.771532, 'temperature': 24.105773,
+                     'humidity': 84.693765, 'air_pressure': 1010.592787, 'power_unit': 0.292777}
+
+        self.std = {'wind_speed': 3.779272, 'wind_direction': 75.625513, 'temperature': 4.876235,
+                    'humidity': 10.244634, 'air_pressure': 26.378137, 'power_unit': 0.293349}
+
+
+
+class Dataset_Typhoon(Dataset):
+    def __init__(self, args, root_path, flag='train', size=None,
+                 features='M', data_path='data.feather',
+                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
+        # size [seq_len, label_len, pred_len]
+        self.args = args
+        # info
+        if size == None:
+            self.seq_len = 96
+            self.label_len = 48
+            self.pred_len = 96
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+        self.const = StaticData()
+
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+        self.id = id
+        id_caps = self.const.caps
+        if self.id is None:
+            self.id_caps = id_caps
+        else:
+            self.id_caps = {i: id_caps[i] for i in self.id if i in id_caps}
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+        # self.nwp_scaler = load(os.path.join(root_path, "scaler_nwp.joblib"))
+
+
+    def __read_data__(self):
+        # read data
+        df_raw = pd.read_feather(os.path.join(self.root_path,
+                                              self.data_path))
+        # remove the prediction duration column
+        df_raw = df_raw.drop(columns=['predict_duration'])
+        # rename the TIMESTAMP column
+        df_raw = df_raw.rename(columns={'TIMESTAMP': 'date', '10': 'wind_speed', '4': 'wind_direction',
+                                        '5': 'temperature', '6': 'humidity', '7': 'air_pressure'})
+        if df_raw.isna().any().any():
+            df_raw = df_raw.fillna(df_raw.mean())
+
+        # scale NWP data and target data if needed
+        self.scaler = StandardScaler()
+        if self.scale:
+            cols_data = df_raw.columns[1:-1] # id column is not needed
+            norm_data = df_raw[cols_data]
+            self.scaler.fit(norm_data.values)
+            df_raw[cols_data] = self.scaler.transform(norm_data.values)
+
+        # 处理时间戳
+        df_one_station = df_raw[df_raw.id == 0]
+        df_stamp = df_one_station[['date']]
+        df_stamp['date'] = pd.to_datetime(df_stamp['date'])
+
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
+            data_stamp = df_stamp.drop(['date'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        # columns = ['10','4','5','6','7', #NWP 0-4
+        #             'power_unit']      #power 5
+
+        self.seq_x = []
+        self.seq_y = []
+        self.seq_x_mark = []
+        self.seq_y_mark = []
+
+        for typhoon_name, typhoon_date in self.const.Typhoons.items():
+            start_time = datetime.strptime(typhoon_date[0], "%Y-%m-%d")
+            end_time = datetime.strptime(typhoon_date[1], "%Y-%m-%d") + timedelta(days=1)
+            start_index = df_one_station[df_one_station.date == start_time].index[0]
+            end_index = df_one_station[df_one_station.date == end_time].index[0]
+
+            # 创建空的dataFrame
+            df_data = pd.DataFrame()
+            for station_id in df_raw.id.unique():
+                if self.id is not None and station_id not in self.id:
+                    continue
+                # 取出当前站点的数据
+                df_station = df_raw[df_raw.id == station_id]
+                # 按列合并所有站点的数据
+                df_data = pd.concat([df_data, df_station], axis=1)
+            # 丢掉重复的 date 列
+            df_data = df_data.loc[:, ~df_data.columns.str.contains('date') | ~df_data.columns.duplicated()]
+
+            # 丢掉所有的 id 列
+            df_data = df_data.drop(['id'], axis=1, errors='ignore')  # 使用 errors='ignore' 确保如果没有 'id' 列时不报错
+
+
+            # 处理一个台风期间的样本
+            for i in range(start_index, end_index - self.pred_len):
+                seq_x = df_data.iloc[i - self.seq_len:i].drop(['date'], 1).values
+                seq_y = df_data.iloc[i - self.seq_len + self.label_len:i - self.seq_len + self.label_len + self.pred_len].drop(['date'], 1).values
+
+                self.seq_x.append(seq_x)
+                self.seq_y.append(seq_y)
+                self.seq_x_mark.append(data_stamp[i - self.seq_len:i])
+                self.seq_y_mark.append(data_stamp[i - self.seq_len + self.label_len:i - self.seq_len + self.label_len + self.pred_len])
+
+
+        # if self.set_type == 0 and self.args.augmentation_ratio > 0:
+        #     self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
+
+
+    def __getitem__(self, index):
+
+        seq_x = self.seq_x[index]
+        seq_y = self.seq_y[index]
+        seq_x_mark = self.seq_x_mark[index]
+        seq_y_mark = self.seq_y_mark[index]
+
+        return seq_x, seq_y, seq_x_mark, seq_y_mark
+
+    def __len__(self):
+        return len(self.seq_x)
+
+    def inverse_transform(self, data):
+        out = data * self.scaler.scale_[-1] + self.scaler.mean_[-1]
+        return out
+
+
 if __name__ == '__main__':
-    dataset = Dataset_WindPower(args=None, root_path='../data/', flag='train', size=None,
+    dataset = Dataset_Typhoon(args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
     print(len(dataset))
