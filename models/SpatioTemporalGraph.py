@@ -4,117 +4,16 @@ import torch
 import numpy as np
 
 
-def super_node_pre_hook(_module, args, kwargs):
-    # print("super_node_pre_hook", args, kwargs)
-    if len(args) > 0:
-        args[0] = torch.nn.functional.pad(args[0], (0, 0, 0, 1), value=0)
-        for i in range(2, 2 + len(args[2:])):
-            args[i] = torch.nn.functional.pad(args[i], (0, 1, 0, 1), value=1)
-    if isinstance(kwargs.get("x", None), torch.Tensor):
-        kwargs["x"] = torch.nn.functional.pad(kwargs["x"], (0, 0, 0, 1), value=0)
-    if isinstance(kwargs.get("adj", None), torch.Tensor):
-        kwargs["adj"] = torch.nn.functional.pad(kwargs["adj"], (0, 1, 0, 1), value=1)
-    if isinstance(kwargs.get("adj_hat", None), torch.Tensor):
-        kwargs["adj_hat"] = torch.nn.functional.pad(
-            kwargs["adj_hat"], (0, 1, 0, 1), value=1
-        )
-    return args, kwargs
 
-
-def super_node_post_hook(_module, _args, _kwargs, x: torch.Tensor):
-    if len(x.shape) > 3:
-        return x[..., :-1, :]
-    else:
-        return x[..., :-1, :-1]
-
-
-class Embedding(torch.nn.Module):
-    def __init__(
-        self, embedding_dim: int, embeddings: dict[str, int | None], device: str = "cpu"
-    ):
-        """
-        @params
-        embedding_dim: embedding dimension (temporal (T))
-        embeddings: dict disribing each embedding depth (keys: time, day, node, degree)
-        device: torch.Device (cpu, cuda, tpu)
-
-        @Inputs
-        x: tensor of shape (B, C, N, T)
-        idx: tensor of shape (B, 2, T)
-
-        @Outputs
-        out: tensor of shape (B, C', N, T')
-        """
-        super().__init__()
-        self.logger = logging.getLogger("Embedding Module")
-        self.embeddings = embeddings
-        if self.embeddings.get("time", None) is not None:
-            self.time_embedding = torch.nn.Embedding(
-                self.embeddings["time"] + 1, embedding_dim=embedding_dim, device=device
-            )
-        if self.embeddings.get("day", None) is not None:
-            self.day_embedding = torch.nn.Embedding(
-                self.embeddings["day"] + 1, embedding_dim=embedding_dim, device=device
-            )
-        if self.embeddings.get("node", None) is not None:
-            self.node_embedding = torch.nn.Embedding(
-                self.embeddings["node"] + 1, embedding_dim=embedding_dim, device=device
-            )
-        if self.embeddings.get("degree", None) is not None:
-            self.degree_embedding = torch.nn.Embedding(
-                self.embeddings["degree"] + 1,
-                embedding_dim=embedding_dim,
-                device=device,
-            )
-
-    def forward(
-        self,
-        x: torch.Tensor,
-        idx: torch.Tensor,
-        node_ids: torch.Tensor | None = None,
-        degrees: torch.Tensor | None = None,
-    ) -> torch.Tensor:
-        logging.debug(
-            "x: %s, idx: %s, node_ids: %s, degrees: %s",
-            x.shape,
-            idx.shape,
-            None if node_ids is None else node_ids.shape,
-            None if degrees is None else degrees.shape,
-        )
-        if self.embeddings.get("time", None) is not None:
-            x += self.time_embedding(idx[:, 0]).transpose(1, 2).unsqueeze(2)
-            logging.debug("x: %s", x.shape)
-        if self.embeddings.get("day", None) is not None:
-            x += self.day_embedding(idx[:, 1]).transpose(1, 2).unsqueeze(2)
-            logging.debug("x: %s", x.shape)
-        if not (self.embeddings.get("node", None) is None or node_ids is None):
-            x += (
-                self.node_embedding(node_ids)
-                .transpose(0, 1)
-                .unsqueeze(0)
-                .unsqueeze(-1)
-                .repeat(x.shape[0], 1, 1, x.shape[-1])
-            )
-            logging.debug("x: %s", x.shape)
-        if not (self.embeddings.get("degree", None) is None or degrees is None):
-            x += (
-                self.degree_embedding(degrees)
-                .transpose(0, 1)
-                .unsqueeze(0)
-                .unsqueeze(-1)
-                .repeat(x.shape[0], 1, 1, x.shape[-1])
-            )
-            logging.debug("x: %s", x.shape)
-        return x
 
 
 class BaseModel(torch.nn.Module):
     def __init__(
         self,
-        embedding_dict: dict[str, int | None],
+        embedding_dict: dict,
         channels_last: bool = True,
         name: str = "",
-        degrees: np.ndarray | None = None,
+        degrees: None = None,
         use_super_node: bool = True,
         device: str = "cpu",
     ) -> None:
@@ -123,25 +22,6 @@ class BaseModel(torch.nn.Module):
         self.channels_last = channels_last
         self.logger = logging.getLogger(name)
         self.embedding_dict = embedding_dict
-        self.hook_handlers = []
-        if use_super_node:
-            self.hook_handlers.append(
-                self.register_forward_pre_hook(super_node_pre_hook, with_kwargs=True)
-            )
-            self.hook_handlers.append(
-                self.register_forward_hook(super_node_post_hook, with_kwargs=True)
-            )
-            self.embedding_dict.get("node", None)
-            if self.embedding_dict.get("node", None) is not None:
-                self.embedding_dict["node"] += 1
-            if self.embedding_dict.get("degree", None) is not None:
-                self.embedding_dict["degree"] = self.embedding_dict.get("node", None)
-            if degrees is not None:
-                degrees += 1
-                degrees = np.concatenate(
-                    (degrees, np.array((self.embedding_dict["node"],))), axis=-1
-                )
-
         self.degrees = (
             None
             if degrees is None
@@ -155,9 +35,6 @@ class BaseModel(torch.nn.Module):
             )
         )
 
-    def remove_super_node_hooks(self):
-        for handle in self.hook_handlers:
-            handle.remove()
 
     def load(self, path: Path = Path.cwd() / "logs" / "model_weights.pth"):
         if path.is_file():
@@ -257,8 +134,8 @@ class GraphAttention(torch.nn.Module):
         self.score_style = True
 
     def forward(
-        self, x: torch.Tensor, adj: torch.Tensor | None, adj_hat: torch.Tensor | None
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
+        self, x: torch.Tensor, adj: torch.Tensor, adj_hat: torch.Tensor
+    ) -> torch.Tensor:
         k = self.k(x)  # B, T', N, (T - t + 1)
         q = self.q(x)  # B, T', N, (T - t + 1)
         v = self.v(x)  # B, T', N, (T - t + 1)
@@ -378,7 +255,7 @@ class MultiHeadGraphAttention(torch.nn.Module):
         self.dropout = torch.nn.Dropout()
 
     def forward(
-        self, x: torch.Tensor, adj: torch.Tensor | None, adj_hat: torch.Tensor | None
+        self, x: torch.Tensor, adj: torch.Tensor, adj_hat: torch.Tensor
     ) -> torch.Tensor:
         res = self.fc_res(x)  # B, C', N, T
 
@@ -408,11 +285,11 @@ class Model(BaseModel):
         hidden_channels: int,
         out_channels: int,
         timestep_max: int,
-        embedding_dict: dict[str, int | None],
+        embedding_dict: dict,
         nb_blocks: int = 1,
         channels_last: bool = True,
         use_super_node: bool = True,
-        degrees: np.ndarray | None = None,
+        degrees: None = None,
         name="STGM_FULL",
         device: str = "cpu",
         show_scores: bool = False,
@@ -442,12 +319,6 @@ class Model(BaseModel):
             degrees=degrees,
             use_super_node=use_super_node,
             embedding_dict=embedding_dict,
-            device=device,
-        )
-
-        self.embedding = Embedding(
-            embedding_dim=hidden_channels,
-            embeddings=self.embedding_dict,
             device=device,
         )
         self.fc_in = torch.nn.Conv2d(
@@ -480,8 +351,8 @@ class Model(BaseModel):
         self,
         x: torch.Tensor,
         idx: torch.Tensor,
-        adj: torch.Tensor | None = None,
-        adj_hat: torch.Tensor | None = None,
+        adj: torch.Tensor,
+        adj_hat: torch.Tensor,
         *args,
         **kwargs
     ) -> torch.Tensor:
@@ -500,11 +371,6 @@ class Model(BaseModel):
         x = self.fc_in(x)  # B, C', N, T
         self.logger.debug("[FC_IN] x: %s", x.shape)
 
-        x = self.embedding(
-            x, idx, degrees=self.degrees, node_ids=self.node_ids
-        )  # B, C', N, T
-        self.logger.debug("[EMBEDDING] x: %s", x.shape)
-
         for block in self.blocks:
             x = block(x, adj, adj_hat)  # B, C', N, T'
             self.logger.debug("[BLOCK] x: %s", x.shape)
@@ -522,9 +388,58 @@ class Model(BaseModel):
 
 
 if __name__ == "__main__":
-    x = torch.rand(2, 12, 207, 2)
-    idx = torch.randint(0, 207, (2, 207))
-    adj = torch.rand(2, 207, 207)
-    adj_hat = torch.rand(2, 207, 207)
-    model = Model( 2, 64, 2, 12, {"node": 207}, nb_blocks=1)
-    out = model(x, idx, adj, adj_hat)
+
+    # Assuming your model and classes are already imported
+
+    # 1. **Prepare Synthetic Data**
+    batch_size = 32
+    num_nodes = 9
+    num_features = 5
+    time_steps = 96
+
+    # Random node feature tensor: [batch_size, num_features, num_nodes, time_steps]
+    x = torch.rand(batch_size, num_features, num_nodes, time_steps)
+
+    # Random index tensor (this might represent time-related information)
+    idx = torch.randint(0, 10, (batch_size, 2, time_steps))  # [batch_size, 2, time_steps]
+
+    # Random adjacency matrix for the graph: [batch_size, num_nodes, num_nodes]
+    adj = torch.rand(batch_size, num_nodes, num_nodes)
+
+    # Random adjacency hat matrix (could be estimated causality)
+    adj_hat = torch.rand(batch_size, num_nodes, num_nodes)
+
+    # Random degree and node_id (node features)
+    degrees = torch.randint(1, 5, (num_nodes,))  # Random degrees for nodes
+    node_ids = torch.arange(num_nodes)  # Node IDs: 0, 1, 2, 3, 4
+
+    # 2. **Initialize Model**
+    embedding_dict = {
+        "time": time_steps,
+        "day": 7,
+        "node": num_nodes,
+        "degree": num_nodes
+    }
+
+    # Initialize the model with random parameters
+    model = Model(
+        in_channels=num_features,
+        hidden_channels=16,
+        out_channels=9,
+        timestep_max=time_steps,
+        embedding_dict=embedding_dict,
+        nb_blocks=2,  # Number of Graph Attention Blocks
+        channels_last=False,
+        use_super_node=False,
+        device='cpu',
+    )
+
+    # 3. **Run the Model**
+    output = model(x, idx, adj, adj_hat)
+
+    # 4. **Inspect Outputs**
+    print("Output shape:", output.shape)  # Should be [batch_size, time_steps', num_nodes, out_channels]
+
+    # Optionally, print the output for inspection
+    print("Output Tensor:", output)
+
