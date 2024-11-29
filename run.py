@@ -1,8 +1,8 @@
 import argparse
 import os
 import torch
-from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
-from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
+from exp.exp_Former_forecasting import Exp_Former_Forecast
+from exp.exp_Graph_forecasting import Exp_Graph_Forecast
 from utils.print_args import print_args
 import random
 import numpy as np
@@ -16,8 +16,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='TimesNet')
 
     # basic config
-    parser.add_argument('--task_name', type=str, required=True, default='long_term_forecast',
-                        help='task name, options:[long_term_forecast, short_term_forecast]')
+    parser.add_argument('--task_name', type=str, required=True, default='Former_forecast',
+                        help='task name, options:[Former_forecast, Graph_forecast]')
     parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
     parser.add_argument('--model_id', type=str, required=True, default='WindPower_96_96', help='model id')
     parser.add_argument('--model', type=str, required=True, default='Autoformer',
@@ -29,7 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('--data_path', type=str, default='data.feather', help='data file')
     parser.add_argument('--features', type=str, default='M',
                         help='forecasting task, options:[M, S, MS]; M:multivariate predict multivariate, S:univariate predict univariate, MS:multivariate predict univariate')
-    parser.add_argument('--target', type=str, default='dayahead_clearing_price', help='target feature in S or MS task')
+    parser.add_argument('--target', type=str, default='power_unit', help='target feature in S or MS task')
     parser.add_argument('--freq', type=str, default='t',
                         help='freq for time features encoding, options:[s:secondly, t:minutely, h:hourly, d:daily, b:business days, w:weekly, m:monthly], you can also use more detailed freq like 15min or 3h')
     parser.add_argument('--checkpoints', type=str, default='./checkpoints/', help='location of model checkpoints')
@@ -146,12 +146,12 @@ if __name__ == '__main__':
     print('Args in experiment:')
     print_args(args)
 
-    if args.task_name == 'long_term_forecast':
-        Exp = Exp_Long_Term_Forecast
-    elif args.task_name == 'short_term_forecast':
-        Exp = Exp_Short_Term_Forecast
+    if args.task_name == 'Former_forecast':
+        Exp = Exp_Former_Forecast
+    elif args.task_name == 'Graph_forecast':
+        Exp = Exp_Graph_Forecast
     else:
-        Exp = Exp_Long_Term_Forecast
+        Exp = Exp_Former_Forecast
 
     if args.is_training:
         for ii in range(args.itr):

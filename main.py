@@ -1,8 +1,8 @@
 import argparse
 import os
 import torch
-from exp.exp_long_term_forecasting import Exp_Long_Term_Forecast
-from exp.exp_short_term_forecasting import Exp_Short_Term_Forecast
+from exp.exp_Former_forecasting import Exp_Former_Forecast
+from exp.exp_Graph_forecasting import Exp_Graph_Forecast
 from utils.print_args import print_args
 import random
 import numpy as np
@@ -11,14 +11,14 @@ import numpy as np
 class Config:
     def __init__(self):
         # 基本配置
-        self.task_name = 'long_term_forecast' # 'imputation', 'short_term_forecast', 'long_term_forecast', 'anomaly_detection', 'classification'
+        self.task_name = 'Graph_forecast' # 'Graph_forecast', 'Former_forecast',
         self.is_training = 1
         self.model_id = 'WindPower_96_96'
-        self.model = 'Informer'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer'
+        self.model = 'SpatioTemporalGraph'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer', ’SpatioTemporalGraph‘
         self.des = 'Exp'
 
         # 数据加载
-        self.data = 'WindPower'
+        self.data = 'STGraph'  # 'WindPower', 'STGraph'
         self.root_path = './data/'
         self.data_path = 'data.feather'
         self.features = 'M'
@@ -65,6 +65,15 @@ class Config:
         self.down_sampling_window = 1
         self.down_sampling_method = None
         self.seg_len = 48
+
+        # 图模型
+        self.in_channels = 6
+        self.hidden_channels = 16
+        self.out_channels = 1
+        self.timestep_max = 96
+        self.nb_blocks = 2
+        self.channels_last = False
+        self.show_scores = False
 
         # 优化
         self.num_workers = 10
@@ -138,12 +147,12 @@ if __name__ == '__main__':
         args.gpu = args.device_ids[0]
 
 
-    if args.task_name == 'long_term_forecast':
-        Exp = Exp_Long_Term_Forecast
-    elif args.task_name == 'short_term_forecast':
-        Exp = Exp_Short_Term_Forecast
+    if args.task_name == 'Former_forecast':
+        Exp = Exp_Former_Forecast
+    elif args.task_name == 'Graph_forecast':
+        Exp = Exp_Graph_Forecast
     else:
-        Exp = Exp_Long_Term_Forecast
+        Exp = Exp_Former_Forecast
 
     if args.is_training:
         for ii in range(args.itr):

@@ -7,53 +7,6 @@ import numpy as np
 
 
 
-class BaseModel(torch.nn.Module):
-    def __init__(
-        self,
-        embedding_dict: dict,
-        channels_last: bool = True,
-        name: str = "",
-        degrees: None = None,
-        use_super_node: bool = True,
-        device: str = "cpu",
-    ) -> None:
-        super().__init__()
-        self.name = name
-        self.channels_last = channels_last
-        self.logger = logging.getLogger(name)
-        self.embedding_dict = embedding_dict
-        self.degrees = (
-            None
-            if degrees is None
-            else torch.tensor(degrees, dtype=torch.int, device=device)
-        )
-        self.node_ids = (
-            None
-            if self.embedding_dict.get("node", None) is None
-            else torch.arange(
-                self.embedding_dict["node"], dtype=torch.int, device=device
-            )
-        )
-
-
-    def load(self, path: Path = Path.cwd() / "logs" / "model_weights.pth"):
-        if path.is_file():
-            self.load_state_dict(torch.load(path))
-            self.logger.info("Model succesfully loaded")
-
-    def save(self, path: Path = Path.cwd() / "logs" / "model_weights.pth"):
-        torch.save(self.state_dict(), path)
-        self.logger.info("Model succesfully saved")
-
-    @property
-    def nparams(self):
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
-    def to_onnx(self):
-        pass
-
-
-
 
 
 class GraphAttention(torch.nn.Module):
@@ -63,7 +16,6 @@ class GraphAttention(torch.nn.Module):
         out_channels: int,
         timestep_max: int,
         time_filter: int,
-        device: str,
         show_scores: bool = False,
     ):
         """
@@ -72,7 +24,6 @@ class GraphAttention(torch.nn.Module):
         out_channels: number of output channels (C')
         timestep_max: number of time steps (T)
         time_filter: size of the time filter (t)
-        device: torch.Device (cpu, cuda, tpu)
 
         @Inputs
         x: tensor of shape (B, C, N, T) [Traffic Data]
@@ -92,21 +43,18 @@ class GraphAttention(torch.nn.Module):
             out_channels=timestep_max,  # T'
             kernel_size=(1, time_filter),  # 1, t
             stride=1,
-            device=device,
         )
         self.q = torch.nn.Conv2d(
             in_channels=in_channels,
             out_channels=timestep_max,
             kernel_size=(1, time_filter),
             stride=1,
-            device=device,
         )
         self.v = torch.nn.Conv2d(
             in_channels=in_channels,
             out_channels=timestep_max,
             kernel_size=(1, time_filter),
             stride=1,
-            device=device,
         )
 
         # Additional layers
@@ -115,19 +63,17 @@ class GraphAttention(torch.nn.Module):
             out_channels=out_channels,  # C'
             kernel_size=(1, 1),
             stride=1,
-            device=device,
         )
         self.fc_out = torch.nn.Conv2d(
             in_channels=(timestep_max - time_filter) + 1,
             out_channels=out_channels,  # C'
             kernel_size=(1, 1),
             stride=1,
-            device=device,
         )
 
         # Activation, Normalization and Dropout
         self.act = torch.nn.Softmax(dim=-1)
-        self.norm = torch.nn.BatchNorm2d(out_channels, device=device)
+        self.norm = torch.nn.BatchNorm2d(out_channels)
         self.dropout = torch.nn.Dropout()
 
         # To remove
@@ -180,7 +126,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
         in_channels: int,
         out_channels: int,
         timestep_max: int,
-        device: str,
         show_scores: bool = False,
     ):
         """
@@ -188,7 +133,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
         in_channels: number of input channels (C)
         out_channels: number of output channels (C')
         timestep_max: number of time steps (T)
-        device: torch.Device (cpu, cuda, tpu)
 
         @Inputs
         x: tensor of shape (B, C, N, T) [Traffic Data]
@@ -206,7 +150,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
             out_channels=out_channels,
             timestep_max=timestep_max,
             time_filter=2,
-            device=device,
             show_scores=show_scores,
         )
         self.ga_3 = GraphAttention(
@@ -214,7 +157,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
             out_channels=out_channels,
             timestep_max=timestep_max,
             time_filter=3,
-            device=device,
             show_scores=show_scores,
         )
         self.ga_6 = GraphAttention(
@@ -222,7 +164,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
             out_channels=out_channels,
             timestep_max=timestep_max,
             time_filter=6,
-            device=device,
             show_scores=show_scores,
         )
         self.ga_7 = GraphAttention(
@@ -230,7 +171,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
             out_channels=out_channels,
             timestep_max=timestep_max,
             time_filter=7,
-            device=device,
             show_scores=show_scores,
         )
 
@@ -240,18 +180,16 @@ class MultiHeadGraphAttention(torch.nn.Module):
             out_channels=out_channels,
             kernel_size=(1, 1),
             stride=1,
-            device=device,
         )
         self.fc_out = torch.nn.Conv2d(
             in_channels=out_channels * 4,
             out_channels=out_channels,
             kernel_size=(1, 1),
             stride=1,
-            device=device,
         )
 
         # Normalization and dropout
-        self.norm = torch.nn.BatchNorm2d(out_channels, device=device)
+        self.norm = torch.nn.BatchNorm2d(out_channels)
         self.dropout = torch.nn.Dropout()
 
     def forward(
@@ -278,24 +216,8 @@ class MultiHeadGraphAttention(torch.nn.Module):
         return x  # B, C', N, T'
 
 
-class Model(BaseModel):
-    def __init__(
-        self,
-        in_channels: int,
-        hidden_channels: int,
-        out_channels: int,
-        timestep_max: int,
-        embedding_dict: dict,
-        nb_blocks: int = 1,
-        channels_last: bool = True,
-        use_super_node: bool = True,
-        degrees: None = None,
-        name="STGM_FULL",
-        device: str = "cpu",
-        show_scores: bool = False,
-        *args,
-        **kwargs
-    ):
+class Model(torch.nn.Module):
+    def __init__(self, configs):
         """
         @params
         in_channels: number of input channels (C)
@@ -313,76 +235,60 @@ class Model(BaseModel):
         @Outputs
         out: tensor of shape (B, T', N, C')
         """
-        super().__init__(
-            name=name,
-            channels_last=channels_last,
-            degrees=degrees,
-            use_super_node=use_super_node,
-            embedding_dict=embedding_dict,
-            device=device,
-        )
+        super(Model, self).__init__()
+        self.task_name = configs.task_name
+        self.seq_len = configs.seq_len
+        self.label_len = configs.label_len
+        self.pred_len = configs.pred_len
+        self.channels_last = configs.channels_last
         self.fc_in = torch.nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=hidden_channels,
+            in_channels=configs.in_channels,
+            out_channels=configs.hidden_channels,
             kernel_size=(1, 1),
             stride=1,
-            device=device,
         )
         self.blocks = torch.nn.ModuleList()
-        for i in range(nb_blocks):
+        for i in range(configs.nb_blocks):
             self.blocks.append(
                 MultiHeadGraphAttention(
-                    in_channels=hidden_channels * (2**i),
-                    out_channels=hidden_channels * (2 ** (i + 1)),
-                    timestep_max=timestep_max,
-                    device=device,
-                    show_scores=show_scores,
+                    in_channels=configs.hidden_channels * (2**i),
+                    out_channels=configs.hidden_channels * (2 ** (i + 1)),
+                    timestep_max=configs.timestep_max,
+                    show_scores=configs.show_scores,
                 )
             )
         self.fc_out = torch.nn.Conv2d(
-            in_channels=hidden_channels * (2**nb_blocks),
-            out_channels=out_channels,
+            in_channels=configs.hidden_channels * (2**configs.nb_blocks),
+            out_channels=configs.out_channels,
             kernel_size=(1, 1),
             stride=1,
-            device=device,
         )
 
     def forward(
         self,
         x: torch.Tensor,
-        idx: torch.Tensor,
         adj: torch.Tensor,
         adj_hat: torch.Tensor,
-        *args,
-        **kwargs
     ) -> torch.Tensor:
-        self.logger.debug(
-            "[INPUTS] x: %s, idx: %s, adj: %s, adj_hat: %s",
-            x.shape,
-            idx.shape,
-            adj.shape if adj is not None else None,
-            adj_hat.shape if adj_hat is not None else None,
-        )
 
         if self.channels_last:
             x = x.transpose(3, 1)  # B, T, N, C -> B, C', N, T
-            self.logger.debug("[IN_TRANSPOSE] x: %s", x.shape)
+
 
         x = self.fc_in(x)  # B, C', N, T
-        self.logger.debug("[FC_IN] x: %s", x.shape)
 
         for block in self.blocks:
             x = block(x, adj, adj_hat)  # B, C', N, T'
-            self.logger.debug("[BLOCK] x: %s", x.shape)
+
 
         x = self.fc_out(x)  # B, C', N, T'
-        self.logger.debug("[FC_OUT] x: %s", x.shape)
+
 
         if self.channels_last:
             x = x.transpose(3, 1)  # B, C', N, T' -> B, T', N, C'
-            self.logger.debug("[OUT_TRANSPOSE] x: %s", x.shape)
 
-        self.logger.debug("[OUT] x: %s", x.shape)
+        x = x.squeeze() # B, C', N, T' -> B, N, T'
+
         return x
 
 
@@ -401,7 +307,7 @@ if __name__ == "__main__":
     x = torch.rand(batch_size, num_features, num_nodes, time_steps)
 
     # Random index tensor (this might represent time-related information)
-    idx = torch.randint(0, 10, (batch_size, 2, time_steps))  # [batch_size, 2, time_steps]
+    # idx = torch.randint(0, 10, (batch_size, 2, time_steps))  # [batch_size, 2, time_steps]
 
     # Random adjacency matrix for the graph: [batch_size, num_nodes, num_nodes]
     adj = torch.rand(batch_size, num_nodes, num_nodes)
@@ -421,24 +327,31 @@ if __name__ == "__main__":
         "degree": num_nodes
     }
 
+
+    class Config:
+        def __init__(self):
+            self.in_channels = num_features
+            self.hidden_channels = 16
+            self.out_channels = 1
+            self.timestep_max = time_steps
+            self.nb_blocks = 2
+            self.channels_last = False
+            self.show_scores = False
+            self.task_name = 'synthetic'
+            self.seq_len = 96
+            self.label_len = 48
+            self.pred_len = 96
+
+
+    args = Config()
     # Initialize the model with random parameters
-    model = Model(
-        in_channels=num_features,
-        hidden_channels=16,
-        out_channels=9,
-        timestep_max=time_steps,
-        embedding_dict=embedding_dict,
-        nb_blocks=2,  # Number of Graph Attention Blocks
-        channels_last=False,
-        use_super_node=False,
-        device='cpu',
-    )
+    model = Model(args)
 
     # 3. **Run the Model**
-    output = model(x, idx, adj, adj_hat)
+    output = model(x, adj, adj_hat)
 
     # 4. **Inspect Outputs**
-    print("Output shape:", output.shape)  # Should be [batch_size, time_steps', num_nodes, out_channels]
+    print("Output shape:", output.shape)  # Should be [batch_size, num_nodes, time_steps']
 
     # Optionally, print the output for inspection
     print("Output Tensor:", output)

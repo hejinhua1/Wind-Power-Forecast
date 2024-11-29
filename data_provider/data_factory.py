@@ -1,8 +1,9 @@
-from data_provider.data_loader import Dataset_WindPower
+from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph
 from torch.utils.data import DataLoader
 
 data_dict = {
-    'WindPower': Dataset_WindPower
+    'WindPower': Dataset_WindPower,
+    'STGraph': Dataset_STGraph
 }
 
 

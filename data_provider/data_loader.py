@@ -10,6 +10,7 @@ from utils.timefeatures import time_features
 from datetime import datetime,timedelta
 from sktime.datasets import load_from_tsfile_to_dataframe
 import warnings
+import math
 from utils.augmentation import run_augmentation_single
 from joblib import load
 warnings.filterwarnings('ignore')
@@ -42,7 +43,17 @@ class Dataset_WindPower(Dataset):
         self.timeenc = timeenc
         self.freq = freq
         self.id = id
-        id_caps = {0:400, 4:400, 6:300, 7:300, 9:300, 10:300, 14:250, 16:245, 17:500}
+        id_caps = {
+            16: 245,
+            9: 300,
+            4: 400,
+            14: 250,
+            0: 400,
+            7: 300,
+            10: 300,
+            17: 500,
+            6: 300
+        }
         if self.id is None:
             self.id_caps = id_caps
         else:
@@ -147,6 +158,7 @@ class Dataset_WindPower(Dataset):
 
 class StaticData:
     def __init__(self):
+        # 台风时间
         self.Typhoons = {
             'mulan': ['2022-08-09', '2022-08-11'],
             'ma-on': ['2022-08-16', '2022-08-23'],
@@ -157,15 +169,76 @@ class StaticData:
             'maliksi': ['2024-05-31', '2024-06-01'],
             'yagi': ['2024-09-05', '2024-09-07']
         }
-        self.caps = {0: 400, 4: 400, 6: 300, 7: 300, 9: 300, 10: 300, 14: 250, 16: 245, 17: 500}
+        # 风电场容量/MW
+        self.caps = {
+            16: 245,
+            9: 300,
+            4: 400,
+            14: 250,
+            0: 400,
+            7: 300,
+            10: 300,
+            17: 500,
+            6: 300
+        }
+        # 风电场经纬度
+        self.coordinates = {
+            16: (116.9930, 23.2692),
+            9: (111.6650, 21.3390),
+            4: (111.5119, 21.2624),
+            14: (114.9953, 22.7061),
+            0: (112.2365, 21.4908),
+            7: (113.4310, 21.9120),
+            10: (110.7611, 20.6272),
+            17: (111.6640, 21.0136),
+            6: (112.1678, 21.4469)
+        }
 
+        # 天气预报数据均值和标准差
         self.mean = {'wind_speed': 7.686432, 'wind_direction': 113.771532, 'temperature': 24.105773,
                      'humidity': 84.693765, 'air_pressure': 1010.592787, 'power_unit': 0.292777}
 
         self.std = {'wind_speed': 3.779272, 'wind_direction': 75.625513, 'temperature': 4.876235,
                     'humidity': 10.244634, 'air_pressure': 26.378137, 'power_unit': 0.293349}
+        self.distance = self.get_distance()
+        self.adj_mx = self.get_adjacency_matrix()
 
 
+    # 计算两个经纬度之间的距离
+    def haversine(self, lon1, lat1, lon2, lat2):
+        R = 6371  # 地球半径，单位：公里
+        phi1 = math.radians(lat1)
+        phi2 = math.radians(lat2)
+        delta_phi = math.radians(lat2 - lat1)
+        delta_lambda = math.radians(lon2 - lon1)
+
+        a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+        c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+        return R * c
+
+    # 计算两两风电场之间的距离
+    def get_distance(self):
+        distances = np.zeros((len(self.coordinates), len(self.coordinates)))
+        i = -1
+        for windfarm1 in self.coordinates.keys():
+            i = i + 1
+            j = -1
+            for windfarm2 in self.coordinates.keys():
+                j = j + 1
+                if windfarm1 != windfarm2:
+                    distances[i][j] = self.haversine(self.coordinates[windfarm1][0], self.coordinates[windfarm1][1],
+                                                 self.coordinates[windfarm2][0], self.coordinates[windfarm2][1])
+        return distances
+    # 计算风电场之间的邻接矩阵
+    def get_adjacency_matrix(self):
+        adj_mx = np.zeros((len(self.coordinates), len(self.coordinates)))
+        sigma = np.std(self.distance.reshape(-1))
+        for i in range(len(self.coordinates)):
+            for j in range(len(self.coordinates)):
+                if i != j:
+                    adj_mx[i, j] = np.exp(- (self.distance[i, j] / sigma) ** 2)
+        return adj_mx
 
 class Dataset_Typhoon(Dataset):
     def __init__(self, args, root_path, flag='train', size=None,
@@ -305,8 +378,153 @@ class Dataset_Typhoon(Dataset):
         return out
 
 
+
+
+class Dataset_STGraph(Dataset):
+    def __init__(self, args, root_path, flag='train', size=None,
+                 features='M', data_path='data.feather',
+                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
+        # size [seq_len, label_len, pred_len]
+        self.args = args
+        # info
+        if size == None:
+            self.seq_len = 96
+            self.label_len = 48
+            self.pred_len = 96
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+        self.const = StaticData()
+
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+        self.id = id
+        id_caps = {
+            16: 245,
+            9: 300,
+            4: 400,
+            14: 250,
+            0: 400,
+            7: 300,
+            10: 300,
+            17: 500,
+            6: 300
+        }
+        if self.id is None:
+            self.id_caps = id_caps
+        else:
+            self.id_caps = {i: id_caps[i] for i in self.id if i in id_caps}
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+        # self.nwp_scaler = load(os.path.join(root_path, "scaler_nwp.joblib"))
+
+
+    def __read_data__(self):
+        # read data
+        df_raw = pd.read_feather(os.path.join(self.root_path,
+                                              self.data_path))
+        # remove the prediction duration column
+        df_raw = df_raw.drop(columns=['predict_duration'])
+        # rename the TIMESTAMP column
+        df_raw = df_raw.rename(columns={'TIMESTAMP': 'date', '10': 'wind_speed', '4': 'wind_direction',
+                                        '5': 'temperature', '6': 'humidity', '7': 'air_pressure'})
+        if df_raw.isna().any().any():
+            df_raw = df_raw.fillna(df_raw.mean())
+
+        # scale NWP data and target data if needed
+        self.scaler = StandardScaler()
+        if self.scale:
+            cols_data = df_raw.columns[1:-1] # id column is not needed
+            norm_data = df_raw[cols_data]
+            self.scaler.fit(norm_data.values)
+            df_raw[cols_data] = self.scaler.transform(norm_data.values)
+
+        # columns = ['10','4','5','6','7', #NWP 0-4
+        #             'power_unit']      #power 5
+
+        border1s = [0, 635 * 24 * 4 - self.seq_len, 635 * 24 * 4 + 20 * 24 * 4 - self.seq_len]
+        border2s = [635 * 24 * 4, 635 * 24 * 4 + 20 * 24 * 4, 787 * 24 * 4]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        # data only
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+        # time stamp only
+        df_one_station = df_raw[df_raw.id == 0]
+        df_stamp = df_one_station[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+
+
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
+            data_stamp = df_stamp.drop(['date'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        all_data = []
+
+        for station_id in df_data.id.unique():
+            if self.id is not None and station_id not in self.id:
+                continue
+
+            data_ = df_data[df_data.id == station_id][border1:border2]
+            data_np = data_.drop(columns=['id']).values
+            all_data.append(data_np)
+
+        data = np.array(all_data) # shape: [num_station, num_time, num_feature]
+        self.data_x = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+        self.data_y = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+
+
+        # if self.set_type == 0 and self.args.augmentation_ratio > 0:
+        #     self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
+
+        self.data_stamp = data_stamp
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[:, :, s_begin:s_end]
+        seq_y = self.data_y[:, :, r_begin:r_end]
+        adj = self.const.adj_mx
+
+
+        return seq_x, seq_y, adj
+
+    def __len__(self):
+        return self.data_x.shape[2] - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        out = data * self.scaler.scale_[-1] + self.scaler.mean_[-1]
+        return out
+
+
+
+
+
+
+
 if __name__ == '__main__':
-    dataset = Dataset_Typhoon(args=None, root_path='../data/', flag='train', size=None,
+    dataset = Dataset_STGraph(args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
-    print(len(dataset))
+    print(dataset[0][0].shape)
