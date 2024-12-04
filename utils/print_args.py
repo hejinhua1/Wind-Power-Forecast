@@ -15,7 +15,8 @@ def print_args(args):
         print("\033[1m" + "Forecasting Task" + "\033[0m")
         print(f'  {"Seq Len:":<20}{args.seq_len:<20}{"Label Len:":<20}{args.label_len:<20}')
         print(f'  {"Pred Len:":<20}{args.pred_len:<20}{"Seasonal Patterns:":<20}{args.seasonal_patterns:<20}')
-        print(f'  {"Inverse:":<20}{args.inverse:<20}')
+        print(f'  {"Channel Last:":<20}{args.channels_last:<20}{"In Channels:":<20}{args.in_channels:<20}')
+        print(f'  {"Inverse:":<20}{args.inverse:<20}{"Out Channels:":<20}{args.out_channels:<20}')
         print()
 
 

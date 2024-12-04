@@ -1,6 +1,6 @@
 import os
 import torch
-from models import Autoformer, TimesNet, Nonstationary_Transformer, Informer, TimeXer, SpatioTemporalGraph
+from models import Autoformer, TimesNet, Nonstationary_Transformer, Informer, TimeXer, SpatioTemporalGraph, GCN
 
 
 class Exp_Basic(object):
@@ -12,7 +12,8 @@ class Exp_Basic(object):
             'Nonstationary_Transformer': Nonstationary_Transformer,
             'Informer': Informer,
             'TimeXer': TimeXer,
-            'SpatioTemporalGraph': SpatioTemporalGraph
+            'SpatioTemporalGraph': SpatioTemporalGraph,
+            'GCN': GCN
         }
 
         self.device = self._acquire_device()

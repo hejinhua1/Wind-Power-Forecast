@@ -19,8 +19,6 @@ python -u run.py \
   --out_channels 1 \
   --timestep_max 96 \
   --nb_blocks 2 \
-  --channels_last False \
-  --show_scores False \
   --batch_size 32 \
   --des 'exp' \
   --itr 1

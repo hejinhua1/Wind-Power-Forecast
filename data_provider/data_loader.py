@@ -202,6 +202,7 @@ class StaticData:
                     'humidity': 10.244634, 'air_pressure': 26.378137, 'power_unit': 0.293349}
         self.distance = self.get_distance()
         self.adj_mx = self.get_adjacency_matrix()
+        self.edge_index = self.get_edge_index()
 
 
     # 计算两个经纬度之间的距离
@@ -239,6 +240,17 @@ class StaticData:
                 if i != j:
                     adj_mx[i, j] = np.exp(- (self.distance[i, j] / sigma) ** 2)
         return adj_mx
+
+    def get_edge_index(self):
+        # 节点数量
+        num_nodes = len(self.caps)
+
+        # 生成所有节点对的组合
+        edges = torch.combinations(torch.arange(num_nodes), r=2)
+
+        edge_index = edges.t().contiguous()
+
+        return edge_index
 
 class Dataset_Typhoon(Dataset):
     def __init__(self, args, root_path, flag='train', size=None,
@@ -506,9 +518,10 @@ class Dataset_STGraph(Dataset):
         seq_x = self.data_x[:, :, s_begin:s_end]
         seq_y = self.data_y[:, :, r_begin:r_end]
         adj = self.const.adj_mx
+        edge_index = self.const.edge_index
 
 
-        return seq_x, seq_y, adj
+        return seq_x, seq_y, adj, edge_index
 
     def __len__(self):
         return self.data_x.shape[2] - self.seq_len - self.pred_len + 1

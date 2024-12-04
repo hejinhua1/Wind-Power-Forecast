@@ -81,6 +81,17 @@ if __name__ == '__main__':
     parser.add_argument('--seg_len', type=int, default=48,
                         help='the length of segmen-wise iteration of SegRNN')
 
+    # 图模型
+    parser.add_argument('--in_channels', type=int, default=6, help='input feature size')
+    parser.add_argument('--hidden_channels', type=int, default=16, help='hidden size')
+    parser.add_argument('--out_channels', type=int, default=1, help='output size')
+    parser.add_argument('--timestep_max', type=int, default=96, help='input sequence length')
+    parser.add_argument('--nb_blocks', type=int, default=2, help='num of blocks of multihead attention')
+    parser.add_argument('--channels_last', type=bool, default=False, help='input data format')
+    parser.add_argument('--show_scores', type=bool, default=False, help='show scores of attention')
+
+
+
     # optimization
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
     parser.add_argument('--itr', type=int, default=1, help='experiments times')
@@ -89,7 +100,7 @@ if __name__ == '__main__':
     parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='optimizer learning rate')
     parser.add_argument('--des', type=str, default='test', help='exp description')
-    parser.add_argument('--loss', type=str, default='Diff', help='loss function')
+    parser.add_argument('--loss', type=str, default='mse', help='loss function')
     parser.add_argument('--lradj', type=str, default='type1', help='adjust learning rate')
     parser.add_argument('--use_amp', action='store_true', help='use automatic mixed precision training', default=False)
 

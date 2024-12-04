@@ -269,11 +269,11 @@ class Model(torch.nn.Module):
         x: torch.Tensor,
         adj: torch.Tensor,
         adj_hat: torch.Tensor,
+        edge_index: torch.Tensor,
     ) -> torch.Tensor:
 
         if self.channels_last:
             x = x.transpose(3, 1)  # B, T, N, C -> B, C', N, T
-
 
         x = self.fc_in(x)  # B, C', N, T
 
@@ -318,6 +318,7 @@ if __name__ == "__main__":
     # Random degree and node_id (node features)
     degrees = torch.randint(1, 5, (num_nodes,))  # Random degrees for nodes
     node_ids = torch.arange(num_nodes)  # Node IDs: 0, 1, 2, 3, 4
+    edge_index = torch.randint(0, num_nodes, (2, 10))  # Random edge index
 
     # 2. **Initialize Model**
     embedding_dict = {
@@ -348,7 +349,7 @@ if __name__ == "__main__":
     model = Model(args)
 
     # 3. **Run the Model**
-    output = model(x, adj, adj_hat)
+    output = model(x, adj, adj_hat, edge_index)
 
     # 4. **Inspect Outputs**
     print("Output shape:", output.shape)  # Should be [batch_size, num_nodes, time_steps']

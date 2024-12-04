@@ -14,7 +14,7 @@ class Config:
         self.task_name = 'Graph_forecast' # 'Graph_forecast', 'Former_forecast',
         self.is_training = 1
         self.model_id = 'WindPower_96_96'
-        self.model = 'SpatioTemporalGraph'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer', ’SpatioTemporalGraph‘
+        self.model = 'GCN'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer', ’SpatioTemporalGraph‘, 'GCN'
         self.des = 'Exp'
 
         # 数据加载
@@ -74,6 +74,9 @@ class Config:
         self.nb_blocks = 2
         self.channels_last = False
         self.show_scores = False
+        self.num_nodes = 9
+        self.num_node_features = 6
+        self.gcn_layers = 3
 
         # 优化
         self.num_workers = 10
