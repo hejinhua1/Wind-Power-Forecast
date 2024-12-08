@@ -17,7 +17,7 @@ class GCNConv(nn.Module):
     def __init__(self, input_dim, output_dim, num_nodes, **kwargs):
         super(GCNConv, self).__init__()
         adj_mat = torch.ones(num_nodes, num_nodes)
-        adj_mat[torch.arange(9), torch.arange(9)] = 0
+        adj_mat[torch.arange(num_nodes), torch.arange(num_nodes)] = 0
         self.register_buffer(
             "laplacian", calculate_laplacian_with_self_loop(torch.FloatTensor(adj_mat))
         )
@@ -91,7 +91,7 @@ class Model(torch.nn.Module):
 
             # 残差连接
             if i < self.gcn_layers - 1:  # 最后一层不需要残差连接
-                x += residual  # 添加残差连接
+                x = x + residual  # 添加残差连接
                 residual = x  # 更新残差值
 
             x = self.dropout(x)

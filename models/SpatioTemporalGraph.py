@@ -269,7 +269,6 @@ class Model(torch.nn.Module):
         x: torch.Tensor,
         adj: torch.Tensor,
         adj_hat: torch.Tensor,
-        edge_index: torch.Tensor,
     ) -> torch.Tensor:
 
         if self.channels_last:
@@ -349,7 +348,7 @@ if __name__ == "__main__":
     model = Model(args)
 
     # 3. **Run the Model**
-    output = model(x, adj, adj_hat, edge_index)
+    output = model(x, adj, adj_hat)
 
     # 4. **Inspect Outputs**
     print("Output shape:", output.shape)  # Should be [batch_size, num_nodes, time_steps']

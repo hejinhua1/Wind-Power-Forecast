@@ -518,10 +518,10 @@ class Dataset_STGraph(Dataset):
         seq_x = self.data_x[:, :, s_begin:s_end]
         seq_y = self.data_y[:, :, r_begin:r_end]
         adj = self.const.adj_mx
-        edge_index = self.const.edge_index
 
 
-        return seq_x, seq_y, adj, edge_index
+
+        return seq_x, seq_y, adj
 
     def __len__(self):
         return self.data_x.shape[2] - self.seq_len - self.pred_len + 1

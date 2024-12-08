@@ -89,6 +89,9 @@ if __name__ == '__main__':
     parser.add_argument('--nb_blocks', type=int, default=2, help='num of blocks of multihead attention')
     parser.add_argument('--channels_last', type=bool, default=False, help='input data format')
     parser.add_argument('--show_scores', type=bool, default=False, help='show scores of attention')
+    parser.add_argument('--num_nodes', type=int, default=9, help='num of nodes')
+    parser.add_argument('--num_node_features', type=int, default=6, help='num of node features')
+    parser.add_argument('--gcn_layers', type=int, default=3, help='num of gcn layers')
 
 
 

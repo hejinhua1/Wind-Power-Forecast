@@ -56,19 +56,19 @@ class Exp_Graph_Forecast(Exp_Basic):
         mse = nn.MSELoss()
 
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_adj, batch_edge_index) in enumerate(vali_loader):
+            for i, (batch_x, batch_y, batch_adj) in enumerate(vali_loader):
                 batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -self.args.pred_len:]
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float()
                 batch_adj = batch_adj.float().to(self.device)
                 batch_adj_hat = torch.zeros_like(batch_adj).float().to(self.device)
-                batch_edge_index = batch_edge_index.to(self.device)
+
 
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs = self.model(batch_x, batch_adj, batch_adj_hat, batch_edge_index)
+                        outputs = self.model(batch_x, batch_adj, batch_adj_hat)
                 else:
-                    outputs = self.model(batch_x, batch_adj, batch_adj_hat, batch_edge_index)
+                    outputs = self.model(batch_x, batch_adj, batch_adj_hat)
 
                 batch_y = batch_y[:, -1, :, -self.args.pred_len:].to(self.device)
 
@@ -109,7 +109,7 @@ class Exp_Graph_Forecast(Exp_Basic):
 
             self.model.train()
             epoch_time = time.time()
-            for i, (batch_x, batch_y, batch_adj, batch_edge_index) in enumerate(train_loader):
+            for i, (batch_x, batch_y, batch_adj) in enumerate(train_loader):
                 iter_count += 1
                 model_optim.zero_grad()
                 batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -self.args.pred_len:]
@@ -117,17 +117,16 @@ class Exp_Graph_Forecast(Exp_Basic):
                 batch_y = batch_y.float().to(self.device)
                 batch_adj = batch_adj.float().to(self.device)
                 batch_adj_hat = torch.zeros_like(batch_adj).float().to(self.device)
-                batch_edge_index = batch_edge_index.to(self.device)
 
 
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs = self.model(batch_x, batch_adj, batch_adj_hat, batch_edge_index)
+                        outputs = self.model(batch_x, batch_adj, batch_adj_hat)
                         batch_y = batch_y[:, -1, :, -self.args.pred_len:].to(self.device)
                         loss = criterion(0, 0, outputs, batch_y, torch.ones_like(batch_y))
                         train_loss.append(loss.item())
                 else:
-                    outputs = self.model(batch_x, batch_adj, batch_adj_hat, batch_edge_index)
+                    outputs = self.model(batch_x, batch_adj, batch_adj_hat)
                     batch_y = batch_y[:, -1, :, -self.args.pred_len:].to(self.device)
                     loss = criterion(0, 0, outputs, batch_y, torch.ones_like(batch_y))
                     train_loss.append(loss.item())
@@ -181,20 +180,19 @@ class Exp_Graph_Forecast(Exp_Basic):
 
         self.model.eval()
         with torch.no_grad():
-            for i, (batch_x, batch_y, batch_adj, batch_edge_index) in enumerate(test_loader):
+            for i, (batch_x, batch_y, batch_adj) in enumerate(test_loader):
                 batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -self.args.pred_len:]
                 batch_x = batch_x.float().to(self.device)
                 batch_y = batch_y.float().to(self.device)
                 batch_adj = batch_adj.float().to(self.device)
                 batch_adj_hat = torch.zeros_like(batch_adj).float().to(self.device)
-                batch_edge_index = batch_edge_index.to(self.device)
 
 
                 if self.args.use_amp:
                     with torch.cuda.amp.autocast():
-                        outputs = self.model(batch_x, batch_adj, batch_adj_hat, batch_edge_index)
+                        outputs = self.model(batch_x, batch_adj, batch_adj_hat)
                 else:
-                    outputs = self.model(batch_x, batch_adj, batch_adj_hat, batch_edge_index)
+                    outputs = self.model(batch_x, batch_adj, batch_adj_hat)
 
                 batch_y = batch_y[:, -1, :, -self.args.pred_len:].to(self.device)
                 outputs = outputs.detach().cpu().numpy()
