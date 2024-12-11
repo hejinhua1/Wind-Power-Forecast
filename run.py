@@ -21,7 +21,7 @@ if __name__ == '__main__':
     parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
     parser.add_argument('--model_id', type=str, required=True, default='WindPower_96_96', help='model id')
     parser.add_argument('--model', type=str, required=True, default='Autoformer',
-                        help='model name, options: [Autoformer, Transformer, TimesNet]')
+                        help='model name, options: [Autoformer, Informer, Nonstationary_Transformer, TimesNet, TimeXer, SpatioTemporalGraph, GCN]')
 
     # data loader
     parser.add_argument('--data', type=str, required=True, default='WindPower', help='dataset type')
@@ -103,7 +103,7 @@ if __name__ == '__main__':
     parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
     parser.add_argument('--learning_rate', type=float, default=0.0001, help='optimizer learning rate')
     parser.add_argument('--des', type=str, default='test', help='exp description')
-    parser.add_argument('--loss', type=str, default='mse', help='loss function')
+    parser.add_argument('--loss', type=str, default='MSE', help='loss function')
     parser.add_argument('--lradj', type=str, default='type1', help='adjust learning rate')
     parser.add_argument('--use_amp', action='store_true', help='use automatic mixed precision training', default=False)
 

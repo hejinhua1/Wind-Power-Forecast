@@ -34,3 +34,58 @@ mse:0.0423, mae:0.1328, rmse:0.2057, mape:246624.0000, mspe:2006796861440.0000, 
 long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs128_lsDiff_0  
 mse:0.0287, mae:0.1128, rmse:0.1693, mape:406095.1562, mspe:4855371399168.0000, dtw:not calculated
 
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsMSE_0  
+mse:0.0301, mae:0.1161, rmse:0.1736, mape:423541.2500, mspe:5010431148032.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsMSE_0  
+mse:0.0301, mae:0.1161, rmse:0.1736, mape:423541.1250, mspe:5010429050880.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsMSE_0  
+mse:0.0301, mae:0.1161, rmse:0.1736, mape:423540.8125, mspe:5010425380864.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Informer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsMSE_0  
+typhoon_mse:0.1676, typhoon_mae:0.3279, typhoon_rmse:0.4094, typhoon_mape:4006794.0000, typhoon_mspe:107273015787520.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs4_lsMSE_0  
+mse:0.0411, mae:0.1286, rmse:0.2026, mape:231663.0312, mspe:2014949801984.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs4_lsMSE_0  
+typhoon_mse:0.1647, typhoon_mae:0.3094, typhoon_rmse:0.4059, typhoon_mape:2181014.2500, typhoon_mspe:41215928041472.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs8_lsMSE_0  
+mse:0.0408, mae:0.1292, rmse:0.2020, mape:241874.0781, mspe:2162894176256.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs8_lsMSE_0  
+typhoon_mse:0.1699, typhoon_mae:0.3157, typhoon_rmse:0.4121, typhoon_mape:2448363.2500, typhoon_mspe:50055541161984.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs16_lsMSE_0  
+mse:0.0400, mae:0.1273, rmse:0.2001, mape:220951.2031, mspe:1901256900608.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs16_lsMSE_0  
+typhoon_mse:0.1500, typhoon_mae:0.3011, typhoon_rmse:0.3874, typhoon_mape:2993838.2500, typhoon_mspe:64193000636416.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs32_lsMSE_0  
+mse:0.0400, mae:0.1291, rmse:0.2000, mape:250192.8281, mspe:2234437861376.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs32_lsMSE_0  
+typhoon_mse:0.1560, typhoon_mae:0.3082, typhoon_rmse:0.3949, typhoon_mape:3044701.2500, typhoon_mspe:66861332955136.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs64_lsMSE_0  
+mse:0.0402, mae:0.1296, rmse:0.2006, mape:258671.3906, mspe:2395777007616.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs64_lsMSE_0  
+typhoon_mse:0.1593, typhoon_mae:0.3069, typhoon_rmse:0.3992, typhoon_mape:3051806.2500, typhoon_mspe:69401369903104.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs128_lsMSE_0  
+mse:0.0402, mae:0.1290, rmse:0.2005, mape:250207.6094, mspe:2270449369088.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_TimeXer_WindPower_ftM_sl96_ll48_pl96_dm256_nh8_el1_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_exp_bs128_lsMSE_0  
+typhoon_mse:0.1602, typhoon_mae:0.3075, typhoon_rmse:0.4003, typhoon_mape:3179080.0000, typhoon_mspe:73216047448064.0000, dtw:not calculated
+
+==================================================long_term_forecast_WindPower_96_96_Autoformer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsMSE_0  
+mse:0.0680, mae:0.1913, rmse:0.2608, mape:666357.6875, mspe:6821022531584.0000, dtw:not calculated
+
+long_term_forecast_WindPower_96_96_Autoformer_WindPower_ftM_sl96_ll48_pl96_dm512_nh8_el2_dl1_df2048_expand2_dc4_fc3_ebtimeF_dtTrue_Exp_bs32_lsMSE_0  
+typhoon_mse:0.1786, typhoon_mae:0.3495, typhoon_rmse:0.4226, typhoon_mape:2760404.2500, typhoon_mspe:52230874988544.0000, dtw:not calculated
+
+==================================================

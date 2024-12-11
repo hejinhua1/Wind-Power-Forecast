@@ -272,6 +272,10 @@ class Dataset_Typhoon(Dataset):
         type_map = {'train': 0, 'val': 1, 'test': 2}
         self.set_type = type_map[flag]
         self.const = StaticData()
+        if flag == 'train':
+            self.typhoon = dict(list(self.const.Typhoons.items())[:6])
+        else:
+            self.typhoon = dict(list(self.const.Typhoons.items())[6:])
 
         self.features = features
         self.target = target
@@ -336,7 +340,7 @@ class Dataset_Typhoon(Dataset):
         self.seq_x_mark = []
         self.seq_y_mark = []
 
-        for typhoon_name, typhoon_date in self.const.Typhoons.items():
+        for typhoon_name, typhoon_date in self.typhoon.items():
             start_time = datetime.strptime(typhoon_date[0], "%Y-%m-%d")
             end_time = datetime.strptime(typhoon_date[1], "%Y-%m-%d") + timedelta(days=1)
             start_index = df_one_station[df_one_station.date == start_time].index[0]
@@ -359,14 +363,18 @@ class Dataset_Typhoon(Dataset):
 
 
             # 处理一个台风期间的样本
-            for i in range(start_index, end_index - self.pred_len):
-                seq_x = df_data.iloc[i - self.seq_len:i].drop(['date'], 1).values
-                seq_y = df_data.iloc[i - self.seq_len + self.label_len:i - self.seq_len + self.label_len + self.pred_len].drop(['date'], 1).values
+            for i in range(start_index, end_index - self.pred_len - self.seq_len):
+                s_begin = i
+                s_end = s_begin + self.seq_len
+                r_begin = s_end - self.label_len
+                r_end = r_begin + self.pred_len + self.label_len
+                seq_x = df_data.iloc[s_begin:s_end].drop(['date'], 1).values
+                seq_y = df_data.iloc[r_begin:r_end].drop(['date'], 1).values
 
                 self.seq_x.append(seq_x)
                 self.seq_y.append(seq_y)
-                self.seq_x_mark.append(data_stamp[i - self.seq_len:i])
-                self.seq_y_mark.append(data_stamp[i - self.seq_len + self.label_len:i - self.seq_len + self.label_len + self.pred_len])
+                self.seq_x_mark.append(data_stamp[s_begin:s_end])
+                self.seq_y_mark.append(data_stamp[r_begin:r_end])
 
 
         # if self.set_type == 0 and self.args.augmentation_ratio > 0:
@@ -537,7 +545,14 @@ class Dataset_STGraph(Dataset):
 
 
 if __name__ == '__main__':
-    dataset = Dataset_STGraph(args=None, root_path='../data/', flag='train', size=None,
+    # dataset = Dataset_STGraph(args=None, root_path='../data/', flag='train', size=None,
+    #              features='M', data_path='data.feather',
+    #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
+    dataset = Dataset_Typhoon(args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
-    print(dataset[0][0].shape)
+    # dataset = Dataset_WindPower(args=None, root_path='../data/', flag='train', size=None,
+    #              features='M', data_path='data.feather',
+    #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
+    x = dataset[0]
+    print(x[0].shape)
