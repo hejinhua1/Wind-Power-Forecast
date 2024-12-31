@@ -14,6 +14,46 @@ import math
 from utils.augmentation import run_augmentation_single
 from joblib import load
 warnings.filterwarnings('ignore')
+from data.train_knowledge_graph import generate_negative_samples, TransEModel
+
+# 定义 Haversine 公式计算距离
+def haversine(lat1, lon1, lat2, lon2):
+    """
+    计算两个经纬度点之间的球面距离（单位：km）
+    """
+    # 地球平均半径（单位：km）
+    EARTH_RADIUS = 6371.0
+    # 将经纬度从度转换为弧度
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return EARTH_RADIUS * c
+
+
+# 定义关系映射函数
+def map_relationship(distance):
+    """
+    根据距离映射关系：
+    SS: <50 km
+    S: 50-100 km
+    GS: 100-150 km
+    WS: 150-200 km
+    N: >200 km
+    """
+    if distance < 50:
+        return 'SS'
+    elif 50 <= distance < 100:
+        return 'S'
+    elif 100 <= distance < 150:
+        return 'GS'
+    elif 150 <= distance < 200:
+        return 'WS'
+    else:
+        return 'N'
+
+
 
 
 
@@ -539,6 +579,198 @@ class Dataset_STGraph(Dataset):
         return out
 
 
+
+
+class Dataset_KGraph(Dataset):
+    '''
+    Dataset for KGraph, which is a knowledge-graph-aided model for spatio-temporal forecasting.
+    input data: NWP data, target data, and knowledge graph embedding
+    '''
+    def __init__(self, args, root_path, flag='train', size=None,
+                 features='M', data_path='data.feather',
+                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
+        # size [seq_len, label_len, pred_len]
+        self.args = args
+        # info
+        if size == None:
+            self.seq_len = 96
+            self.label_len = 48
+            self.pred_len = 96
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+        self.const = StaticData()
+
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+        self.id = id
+        id_caps = {
+            16: 245,
+            9: 300,
+            4: 400,
+            14: 250,
+            0: 400,
+            7: 300,
+            10: 300,
+            17: 500,
+            6: 300
+        }
+        if self.id is None:
+            self.id_caps = id_caps
+        else:
+            self.id_caps = {i: id_caps[i] for i in self.id if i in id_caps}
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+        # self.nwp_scaler = load(os.path.join(root_path, "scaler_nwp.joblib"))
+
+
+    def __read_data__(self):
+        # read data
+        df_raw = pd.read_feather(os.path.join(self.root_path,
+                                              self.data_path))
+
+        # remove the prediction duration column
+        df_raw = df_raw.drop(columns=['predict_duration'])
+        # rename the TIMESTAMP column
+        df_raw = df_raw.rename(columns={'TIMESTAMP': 'date', '10': 'wind_speed', '4': 'wind_direction',
+                                        '5': 'temperature', '6': 'humidity', '7': 'air_pressure'})
+        if df_raw.isna().any().any():
+            df_raw = df_raw.fillna(df_raw.mean())
+
+        # scale NWP data and target data if needed
+        self.scaler = StandardScaler()
+        if self.scale:
+            cols_data = df_raw.columns[1:-1] # id column is not needed
+            norm_data = df_raw[cols_data]
+            self.scaler.fit(norm_data.values)
+            df_raw[cols_data] = self.scaler.transform(norm_data.values)
+
+        # columns = ['10','4','5','6','7', #NWP 0-4
+        #             'power_unit']      #power 5
+
+        border1s = [0, 635 * 24 * 4 - self.seq_len, 635 * 24 * 4 + 20 * 24 * 4 - self.seq_len]
+        border2s = [635 * 24 * 4, 635 * 24 * 4 + 20 * 24 * 4, 787 * 24 * 4]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        # data only
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+        # time stamp only
+        df_one_station = df_raw[df_raw.id == 0]
+        df_stamp = df_one_station[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+
+
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
+            data_stamp = df_stamp.drop(['date'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        all_data = []
+
+        for station_id in df_data.id.unique():
+            if self.id is not None and station_id not in self.id:
+                continue
+
+            data_ = df_data[df_data.id == station_id][border1:border2]
+            data_np = data_.drop(columns=['id']).values
+            all_data.append(data_np)
+
+        data = np.array(all_data) # shape: [num_station, num_time, num_feature]
+        self.data_x = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+        self.data_y = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+
+
+        # if self.set_type == 0 and self.args.augmentation_ratio > 0:
+        #     self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
+
+        self.data_stamp = data_stamp
+
+    def __process_typhoon_data__(self):
+        """
+        Process typhoon data
+        :param self:
+        :return: 9个风电场的（台风，关系，风电场） 三元组
+        """
+        typhoon_data = pd.read_feather(os.path.join(self.root_path,
+                                                  'typhoon.feather'))
+        wind_farms = {
+            'Farm16': (116.9930, 23.2692),
+            'Farm9': (111.6650, 21.3390),
+            'Farm4': (111.5119, 21.2624),
+            'Farm14': (114.9953, 22.7061),
+            'Farm0': (112.2365, 21.4908),
+            'Farm7': (113.4310, 21.9120),
+            'Farm10': (110.7611, 20.6272),
+            'Farm17': (111.6640, 21.0136),
+            'Farm6': (112.1678, 21.4469)
+        }
+        # 创建存储三元组的列表
+        triples = []
+        # 遍历每个台风记录和每个风电场，计算距离和关系
+        for _, row in typhoon_data.iterrows():
+            if row['typhoon'] == 1:
+                lat1, lon1 = row['LAT'], row['LON']
+                # 如果 lat1, lon1 不在划定的范围内（假设范围为0-90纬度，0-180经度），跳过
+                if not (18 <= lat1 <= 23 and 110 <= lon1 <= 119):
+                    continue
+
+                entity1 = row['Entity1']
+
+                for farm_name, (lon2, lat2) in wind_farms.items():
+                    # 计算距离
+                    distance = haversine(lat1, lon1, lat2, lon2)
+                    # 映射关系
+                    relationship = map_relationship(distance)
+                    # 添加三元组 (实体1, 关系, 实体2)
+                    triples.append((entity1, relationship, farm_name))
+            else:
+                for farm_name, (lon2, lat2) in wind_farms.items():
+                    triples.append(('OutOfRange', 'N', farm_name))
+
+
+
+
+
+
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[:, :, s_begin:s_end]
+        seq_y = self.data_y[:, :, r_begin:r_end]
+        adj = self.const.adj_mx
+
+
+
+        return seq_x, seq_y, adj
+
+    def __len__(self):
+        return self.data_x.shape[2] - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        out = data * self.scaler.scale_[-1] + self.scaler.mean_[-1]
+        return out
 
 
 
