@@ -138,6 +138,7 @@ checkpoints/
 logs/
 vision/
 dataset/
-data/
+data/*.feather
+data/*.csv
 results/
 test_results/
