@@ -152,3 +152,9 @@ with torch.no_grad():
     negative_test = generate_negative_samples(test_triplets, num_entities)
     test_loss = model(positive_test, negative_test)
     print(f"Test Loss: {test_loss.item()}")
+
+# 加载self.entity_embeddings
+entity_embeddings = model.entity_embeddings.weight.data.numpy()
+embedding = entity_embeddings[5]
+print(embedding.shape)
+
