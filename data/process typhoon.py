@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 
 
-
+# STEP 1
 # 文件路径
 file_path = r'E:\HJHCloud\Seafile\typhoon data\最佳路径数据集完整版\ibtracs.WP.list.v04r01.csv'
 typhoon_track_data = pd.read_csv(file_path, low_memory=False)

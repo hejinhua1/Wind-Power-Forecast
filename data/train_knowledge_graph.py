@@ -6,6 +6,8 @@ import torch.nn as nn
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 
+
+# STEP 3
 # 1. 加载 typhoon_windfarm_relationships.csv
 file_path = 'typhoon_windfarm_relationships.csv'
 data = pd.read_csv(file_path)
@@ -17,7 +19,6 @@ triplets = data[['Entity1', 'Relationship', 'Entity2']].values.tolist()
 # 将所有实体和关系编码为索引
 entities = set(data['Entity1']).union(set(data['Entity2']))
 relations = set(data['Relationship'])
-
 entity2id = {entity: idx for idx, entity in enumerate(entities)}
 relation2id = {relation: idx for idx, relation in enumerate(relations)}
 

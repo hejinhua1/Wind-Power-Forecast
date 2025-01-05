@@ -1,6 +1,9 @@
 import pandas as pd
 import numpy as np
 
+
+
+# STEP 2
 # 地球平均半径（单位：km）
 EARTH_RADIUS = 6371.0
 
@@ -43,11 +46,17 @@ def map_relationship(distance):
 
 # 读取台风数据
 typhoon_data = pd.read_csv('typhoondata_ZhenZhuWan.csv')
+typhoon_data1 = pd.read_feather('typhoon_data.feather')
+typhoon_data2 = typhoon_data1[typhoon_data1['typhoon']==1]
 
 # 取整台风经纬度，映射为实体1
 typhoon_data['LAT_int'] = typhoon_data['LAT'].astype(int)
 typhoon_data['LON_int'] = typhoon_data['LON'].astype(int)
 typhoon_data['Entity1'] = typhoon_data['LAT_int'].astype(str) + "_" + typhoon_data['LON_int'].astype(str)
+
+typhoon_data2['LAT_int'] = typhoon_data2['LAT'].astype(int)
+typhoon_data2['LON_int'] = typhoon_data2['LON'].astype(int)
+typhoon_data2['Entity1'] = typhoon_data2['LAT_int'].astype(str) + "_" + typhoon_data2['LON_int'].astype(str)
 
 # 定义海上风电场的经纬度（实体2）
 wind_farms = {
@@ -67,6 +76,23 @@ triples = []
 
 # 遍历每个台风记录和每个风电场，计算距离和关系
 for _, row in typhoon_data.iterrows():
+    lat1, lon1 = row['LAT'], row['LON']
+    # 如果 lat1, lon1 不在划定的范围内（假设范围为0-90纬度，0-180经度），跳过
+    if not (18 <= lat1 <= 23 and 110 <= lon1 <= 119):
+        continue
+
+    entity1 = row['Entity1']
+
+    for farm_name, (lon2, lat2) in wind_farms.items():
+        # 计算距离
+        distance = haversine(lat1, lon1, lat2, lon2)
+        # 映射关系
+        relationship = map_relationship(distance)
+        # 添加三元组 (实体1, 关系, 实体2)
+        triples.append((entity1, relationship, farm_name))
+
+# 遍历每个台风记录和每个风电场，计算距离和关系
+for _, row in typhoon_data2.iterrows():
     lat1, lon1 = row['LAT'], row['LON']
     # 如果 lat1, lon1 不在划定的范围内（假设范围为0-90纬度，0-180经度），跳过
     if not (18 <= lat1 <= 23 and 110 <= lon1 <= 119):
