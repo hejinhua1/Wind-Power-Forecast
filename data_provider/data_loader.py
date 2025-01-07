@@ -8,52 +8,13 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.preprocessing import StandardScaler
 from utils.timefeatures import time_features
 from datetime import datetime,timedelta
-from sktime.datasets import load_from_tsfile_to_dataframe
+# from sktime.datasets import load_from_tsfile_to_dataframe
 import warnings
 import math
 from utils.augmentation import run_augmentation_single
 from joblib import load
 warnings.filterwarnings('ignore')
-from data.train_knowledge_graph import generate_negative_samples, TransEModel
-
-# 定义 Haversine 公式计算距离
-def haversine(lat1, lon1, lat2, lon2):
-    """
-    计算两个经纬度点之间的球面距离（单位：km）
-    """
-    # 地球平均半径（单位：km）
-    EARTH_RADIUS = 6371.0
-    # 将经纬度从度转换为弧度
-    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = np.sin(dlat / 2) ** 2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon / 2) ** 2
-    c = 2 * np.arcsin(np.sqrt(a))
-    return EARTH_RADIUS * c
-
-
-# 定义关系映射函数
-def map_relationship(distance):
-    """
-    根据距离映射关系：
-    SS: <50 km
-    S: 50-100 km
-    GS: 100-150 km
-    WS: 150-200 km
-    N: >200 km
-    """
-    if distance < 50:
-        return 'SS'
-    elif 50 <= distance < 100:
-        return 'S'
-    elif 100 <= distance < 150:
-        return 'GS'
-    elif 150 <= distance < 200:
-        return 'WS'
-    else:
-        return 'N'
-
-
+from data.train_knowledge_graph import TransEModel
 
 
 
@@ -587,7 +548,7 @@ class Dataset_KGraph(Dataset):
     input data: NWP data, target data, and knowledge graph embedding
     '''
     def __init__(self, args, root_path, flag='train', size=None,
-                 features='M', data_path='data.feather',
+                 features='M', data_path='data_with_entity_id.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
         # size [seq_len, label_len, pred_len]
         self.args = args
@@ -632,7 +593,11 @@ class Dataset_KGraph(Dataset):
         self.data_path = data_path
         self.__read_data__()
         # self.nwp_scaler = load(os.path.join(root_path, "scaler_nwp.joblib"))
-
+        # load trained TransE model
+        model = TransEModel(num_entities=64, num_relations=5, embedding_dim=10)  # TransE model
+        model.load_state_dict(torch.load('../data/best_transe_model.pth'))
+        self.entity_embeddings = model.entity_embeddings
+        self.relation_embeddings = model.relation_embeddings
 
     def __read_data__(self):
         # read data
@@ -650,7 +615,7 @@ class Dataset_KGraph(Dataset):
         # scale NWP data and target data if needed
         self.scaler = StandardScaler()
         if self.scale:
-            cols_data = df_raw.columns[1:-1] # id column is not needed
+            cols_data = df_raw.columns[1:-4] # id column tryples are not needed
             norm_data = df_raw[cols_data]
             self.scaler.fit(norm_data.values)
             df_raw[cols_data] = self.scaler.transform(norm_data.values)
@@ -703,51 +668,6 @@ class Dataset_KGraph(Dataset):
 
         self.data_stamp = data_stamp
 
-    def __process_typhoon_data__(self):
-        """
-        Process typhoon data
-        :param self:
-        :return: 9个风电场的（台风，关系，风电场） 三元组
-        """
-        typhoon_data = pd.read_feather(os.path.join(self.root_path,
-                                                  'typhoon.feather'))
-        wind_farms = {
-            'Farm16': (116.9930, 23.2692),
-            'Farm9': (111.6650, 21.3390),
-            'Farm4': (111.5119, 21.2624),
-            'Farm14': (114.9953, 22.7061),
-            'Farm0': (112.2365, 21.4908),
-            'Farm7': (113.4310, 21.9120),
-            'Farm10': (110.7611, 20.6272),
-            'Farm17': (111.6640, 21.0136),
-            'Farm6': (112.1678, 21.4469)
-        }
-        # 创建存储三元组的列表
-        triples = []
-        # 遍历每个台风记录和每个风电场，计算距离和关系
-        for _, row in typhoon_data.iterrows():
-            if row['typhoon'] == 1:
-                lat1, lon1 = row['LAT'], row['LON']
-                # 如果 lat1, lon1 不在划定的范围内（假设范围为0-90纬度，0-180经度），跳过
-                if not (18 <= lat1 <= 23 and 110 <= lon1 <= 119):
-                    continue
-
-                entity1 = row['Entity1']
-
-                for farm_name, (lon2, lat2) in wind_farms.items():
-                    # 计算距离
-                    distance = haversine(lat1, lon1, lat2, lon2)
-                    # 映射关系
-                    relationship = map_relationship(distance)
-                    # 添加三元组 (实体1, 关系, 实体2)
-                    triples.append((entity1, relationship, farm_name))
-            else:
-                for farm_name, (lon2, lat2) in wind_farms.items():
-                    triples.append(('OutOfRange', 'N', farm_name))
-
-
-
-
 
 
 
@@ -757,13 +677,25 @@ class Dataset_KGraph(Dataset):
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
 
-        seq_x = self.data_x[:, :, s_begin:s_end]
-        seq_y = self.data_y[:, :, r_begin:r_end]
+        seq_x = self.data_x[:-3, :, s_begin:s_end]
+        seq_y = self.data_y[:-3, :, r_begin:r_end]
         adj = self.const.adj_mx
 
+        embedding_head_id_x = self.data_x[-3, :, s_begin:s_end]
+        embedding_head_id_y = self.data_y[-3, :, r_begin:r_end]
+        embedding_head_x = self.entity_embeddings(torch.tensor(embedding_head_id_x, dtype=torch.int))
+        embedding_head_y = self.entity_embeddings(torch.tensor(embedding_head_id_y, dtype=torch.int))
 
+        embedding_relation_id_x = self.data_x[-2, :, s_begin:s_end]
+        embedding_relation_id_y = self.data_y[-2, :, r_begin:r_end]
+        embedding_relation_x = self.entity_embeddings(torch.tensor(embedding_relation_id_x, dtype=torch.int))
+        embedding_relation_y = self.entity_embeddings(torch.tensor(embedding_relation_id_y, dtype=torch.int))
 
-        return seq_x, seq_y, adj
+        embedding_x = torch.cat([embedding_head_x, embedding_relation_x], dim=2)
+        embedding_y = torch.cat([embedding_head_y, embedding_relation_y], dim=2)
+        embedding_x = embedding_x.permute(2, 0, 1).data.numpy()
+        embedding_y = embedding_y.permute(2, 0, 1).data.numpy()
+        return seq_x, seq_y, adj, embedding_x, embedding_y
 
     def __len__(self):
         return self.data_x.shape[2] - self.seq_len - self.pred_len + 1
@@ -780,11 +712,14 @@ if __name__ == '__main__':
     # dataset = Dataset_STGraph(args=None, root_path='../data/', flag='train', size=None,
     #              features='M', data_path='data.feather',
     #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
-    dataset = Dataset_Typhoon(args=None, root_path='../data/', flag='train', size=None,
-                 features='M', data_path='data.feather',
-                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
+    # dataset = Dataset_Typhoon(args=None, root_path='../data/', flag='train', size=None,
+    #              features='M', data_path='data.feather',
+    #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
     # dataset = Dataset_WindPower(args=None, root_path='../data/', flag='train', size=None,
     #              features='M', data_path='data.feather',
     #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
+    dataset = Dataset_KGraph(args=None, root_path='../data/', flag='train', size=None,
+                 features='M', data_path='data_with_entity_id.feather',
+                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
     x = dataset[0]
     print(x[0].shape)
