@@ -595,7 +595,8 @@ class Dataset_KGraph(Dataset):
         # self.nwp_scaler = load(os.path.join(root_path, "scaler_nwp.joblib"))
         # load trained TransE model
         model = TransEModel(num_entities=64, num_relations=5, embedding_dim=10)  # TransE model
-        model.load_state_dict(torch.load('../data/best_transe_model.pth'))
+        model.load_state_dict(torch.load(os.path.join(self.root_path,
+                                              'best_transe_model.pth')))
         self.entity_embeddings = model.entity_embeddings
         self.relation_embeddings = model.relation_embeddings
 

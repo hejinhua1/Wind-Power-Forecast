@@ -3,6 +3,7 @@ import os
 import torch
 from exp.exp_Former_forecasting import Exp_Former_Forecast
 from exp.exp_Graph_forecasting import Exp_Graph_Forecast
+from exp.exp_KGraph_forecasting import Exp_KGraph_Forecast
 from utils.print_args import print_args
 import random
 import numpy as np
@@ -17,7 +18,7 @@ if __name__ == '__main__':
 
     # basic config
     parser.add_argument('--task_name', type=str, required=True, default='Former_forecast',
-                        help='task name, options:[Former_forecast, Graph_forecast]')
+                        help='task name, options:[Graph_forecast, Former_forecast, KGraph_forecast]')
     parser.add_argument('--is_training', type=int, required=True, default=1, help='status')
     parser.add_argument('--model_id', type=str, required=True, default='WindPower_96_96', help='model id')
     parser.add_argument('--model', type=str, required=True, default='Autoformer',
@@ -164,6 +165,8 @@ if __name__ == '__main__':
         Exp = Exp_Former_Forecast
     elif args.task_name == 'Graph_forecast':
         Exp = Exp_Graph_Forecast
+    elif args.task_name == 'KGraph_forecast':
+        Exp = Exp_KGraph_Forecast
     else:
         Exp = Exp_Former_Forecast
 

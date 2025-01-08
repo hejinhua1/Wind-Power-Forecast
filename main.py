@@ -3,6 +3,7 @@ import os
 import torch
 from exp.exp_Former_forecasting import Exp_Former_Forecast
 from exp.exp_Graph_forecasting import Exp_Graph_Forecast
+from exp.exp_KGraph_forecasting import Exp_KGraph_Forecast
 from utils.print_args import print_args
 import random
 import numpy as np
@@ -11,16 +12,16 @@ import numpy as np
 class Config:
     def __init__(self):
         # 基本配置
-        self.task_name = 'Graph_forecast' # 'Graph_forecast', 'Former_forecast',
+        self.task_name = 'KGraph_forecast' # 'Graph_forecast', 'Former_forecast', 'KGraph_forecast'
         self.is_training = 1
-        self.model_id = 'WindPower_96_96'
-        self.model = 'GCN'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer', ’SpatioTemporalGraph‘, 'GCN'
+        self.model_id = 'KGraph_96_96'
+        self.model = 'KGraph'   # 'Autoformer', 'Informer', 'Nonstationary_Transformer', 'TimesNet', 'TimeXer', ’SpatioTemporalGraph‘, 'GCN' , 'KGraph'
         self.des = 'Exp'
 
         # 数据加载
-        self.data = 'STGraph'  # 'WindPower', 'STGraph'
+        self.data = 'KGraph'  # 'WindPower', 'STGraph', 'KGraph'
         self.root_path = './data/'
-        self.data_path = 'data.feather'
+        self.data_path = 'data_with_entity_id.feather' # data_with_entity_id.feather, data.feather
         self.features = 'M'
         self.target = 'power_unit'
         self.freq = 't'
@@ -67,7 +68,7 @@ class Config:
         self.seg_len = 48
 
         # 图模型
-        self.in_channels = 6
+        self.in_channels = 26
         self.hidden_channels = 16
         self.out_channels = 1
         self.timestep_max = 96
@@ -133,7 +134,7 @@ class Config:
 # 示例用法
 if __name__ == '__main__':
 
-    fix_seed = 2021
+    fix_seed = 2024
     random.seed(fix_seed)
     torch.manual_seed(fix_seed)
     np.random.seed(fix_seed)
@@ -154,6 +155,8 @@ if __name__ == '__main__':
         Exp = Exp_Former_Forecast
     elif args.task_name == 'Graph_forecast':
         Exp = Exp_Graph_Forecast
+    elif args.task_name == 'KGraph_forecast':
+        Exp = Exp_KGraph_Forecast
     else:
         Exp = Exp_Former_Forecast
 

@@ -14,7 +14,8 @@ class Exp_Basic(object):
             'TimeXer': TimeXer,
             'SpatioTemporalGraph': SpatioTemporalGraph,
             'GCN': GCN,
-            'GAT': GAT
+            'GAT': GAT,
+            'KGraph': SpatioTemporalGraph
         }
 
         self.device = self._acquire_device()

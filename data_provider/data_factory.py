@@ -1,9 +1,10 @@
-from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon
+from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph
 from torch.utils.data import DataLoader
 
 data_dict = {
     'WindPower': Dataset_WindPower,
-    'STGraph': Dataset_STGraph
+    'STGraph': Dataset_STGraph,
+    'KGraph': Dataset_KGraph
 }
 
 
