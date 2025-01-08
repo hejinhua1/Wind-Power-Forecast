@@ -706,6 +706,174 @@ class Dataset_KGraph(Dataset):
         return out
 
 
+class Dataset_Typhoon_KGraph(Dataset):
+    '''
+    Dataset for KGraph during typhoon, which is a knowledge-graph-aided model for spatio-temporal forecasting.
+    input data: NWP data, target data, and knowledge graph embedding
+    '''
+    def __init__(self, args, root_path, flag='train', size=None,
+                 features='M', data_path='data_with_entity_id.feather',
+                 target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
+        # size [seq_len, label_len, pred_len]
+        self.args = args
+        # info
+        if size == None:
+            self.seq_len = 96
+            self.label_len = 48
+            self.pred_len = 96
+        else:
+            self.seq_len = size[0]
+            self.label_len = size[1]
+            self.pred_len = size[2]
+        # init
+        assert flag in ['train', 'test', 'val']
+        type_map = {'train': 0, 'val': 1, 'test': 2}
+        self.set_type = type_map[flag]
+        self.const = StaticData()
+        if flag == 'train':
+            self.typhoon = dict(list(self.const.Typhoons.items())[:6])
+        else:
+            self.typhoon = dict(list(self.const.Typhoons.items())[6:])
+
+        self.features = features
+        self.target = target
+        self.scale = scale
+        self.timeenc = timeenc
+        self.freq = freq
+        self.id = id
+        id_caps = {
+            16: 245,
+            9: 300,
+            4: 400,
+            14: 250,
+            0: 400,
+            7: 300,
+            10: 300,
+            17: 500,
+            6: 300
+        }
+        if self.id is None:
+            self.id_caps = id_caps
+        else:
+            self.id_caps = {i: id_caps[i] for i in self.id if i in id_caps}
+
+        self.root_path = root_path
+        self.data_path = data_path
+        self.__read_data__()
+        # self.nwp_scaler = load(os.path.join(root_path, "scaler_nwp.joblib"))
+        # load trained TransE model
+        model = TransEModel(num_entities=64, num_relations=5, embedding_dim=10)  # TransE model
+        model.load_state_dict(torch.load(os.path.join(self.root_path,
+                                              'best_transe_model.pth')))
+        self.entity_embeddings = model.entity_embeddings
+        self.relation_embeddings = model.relation_embeddings
+
+    def __read_data__(self):
+        # read data
+        df_raw = pd.read_feather(os.path.join(self.root_path,
+                                              self.data_path))
+
+        # remove the prediction duration column
+        df_raw = df_raw.drop(columns=['predict_duration'])
+        # rename the TIMESTAMP column
+        df_raw = df_raw.rename(columns={'TIMESTAMP': 'date', '10': 'wind_speed', '4': 'wind_direction',
+                                        '5': 'temperature', '6': 'humidity', '7': 'air_pressure'})
+        if df_raw.isna().any().any():
+            df_raw = df_raw.fillna(df_raw.mean())
+
+        # scale NWP data and target data if needed
+        self.scaler = StandardScaler()
+        if self.scale:
+            cols_data = df_raw.columns[1:-4] # id column tryples are not needed
+            norm_data = df_raw[cols_data]
+            self.scaler.fit(norm_data.values)
+            df_raw[cols_data] = self.scaler.transform(norm_data.values)
+
+        # columns = ['10','4','5','6','7', #NWP 0-4
+        #             'power_unit']      #power 5
+
+        border1s = [0, 635 * 24 * 4 - self.seq_len, 635 * 24 * 4 + 20 * 24 * 4 - self.seq_len]
+        border2s = [635 * 24 * 4, 635 * 24 * 4 + 20 * 24 * 4, 787 * 24 * 4]
+        border1 = border1s[self.set_type]
+        border2 = border2s[self.set_type]
+        # data only
+        cols_data = df_raw.columns[1:]
+        df_data = df_raw[cols_data]
+        # time stamp only
+        df_one_station = df_raw[df_raw.id == 0]
+        df_stamp = df_one_station[['date']][border1:border2]
+        df_stamp['date'] = pd.to_datetime(df_stamp.date)
+
+
+        if self.timeenc == 0:
+            df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
+            df_stamp['day'] = df_stamp.date.apply(lambda row: row.day, 1)
+            df_stamp['weekday'] = df_stamp.date.apply(lambda row: row.weekday(), 1)
+            df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
+            df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
+            df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
+            data_stamp = df_stamp.drop(['date'], 1).values
+        elif self.timeenc == 1:
+            data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
+            data_stamp = data_stamp.transpose(1, 0)
+
+        all_data = []
+
+        for station_id in df_data.id.unique():
+            if self.id is not None and station_id not in self.id:
+                continue
+
+            data_ = df_data[df_data.id == station_id][border1:border2]
+            data_np = data_.drop(columns=['id']).values
+            all_data.append(data_np)
+
+        data = np.array(all_data) # shape: [num_station, num_time, num_feature]
+        self.data_x = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+        self.data_y = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+
+
+        # if self.set_type == 0 and self.args.augmentation_ratio > 0:
+        #     self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
+
+        self.data_stamp = data_stamp
+
+
+
+
+    def __getitem__(self, index):
+        s_begin = index
+        s_end = s_begin + self.seq_len
+        r_begin = s_end - self.label_len
+        r_end = r_begin + self.label_len + self.pred_len
+
+        seq_x = self.data_x[:-3, :, s_begin:s_end]
+        seq_y = self.data_y[:-3, :, r_begin:r_end]
+        adj = self.const.adj_mx
+
+        embedding_head_id_x = self.data_x[-3, :, s_begin:s_end]
+        embedding_head_id_y = self.data_y[-3, :, r_begin:r_end]
+        embedding_head_x = self.entity_embeddings(torch.tensor(embedding_head_id_x, dtype=torch.int))
+        embedding_head_y = self.entity_embeddings(torch.tensor(embedding_head_id_y, dtype=torch.int))
+
+        embedding_relation_id_x = self.data_x[-2, :, s_begin:s_end]
+        embedding_relation_id_y = self.data_y[-2, :, r_begin:r_end]
+        embedding_relation_x = self.entity_embeddings(torch.tensor(embedding_relation_id_x, dtype=torch.int))
+        embedding_relation_y = self.entity_embeddings(torch.tensor(embedding_relation_id_y, dtype=torch.int))
+
+        embedding_x = torch.cat([embedding_head_x, embedding_relation_x], dim=2)
+        embedding_y = torch.cat([embedding_head_y, embedding_relation_y], dim=2)
+        embedding_x = embedding_x.permute(2, 0, 1).data.numpy()
+        embedding_y = embedding_y.permute(2, 0, 1).data.numpy()
+        return seq_x, seq_y, adj, embedding_x, embedding_y
+
+    def __len__(self):
+        return self.data_x.shape[2] - self.seq_len - self.pred_len + 1
+
+    def inverse_transform(self, data):
+        out = data * self.scaler.scale_[-1] + self.scaler.mean_[-1]
+        return out
+
+
 
 
 
