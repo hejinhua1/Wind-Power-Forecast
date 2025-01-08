@@ -772,7 +772,6 @@ class Dataset_Typhoon_KGraph(Dataset):
         # read data
         df_raw = pd.read_feather(os.path.join(self.root_path,
                                               self.data_path))
-
         # remove the prediction duration column
         df_raw = df_raw.drop(columns=['predict_duration'])
         # rename the TIMESTAMP column
@@ -784,26 +783,19 @@ class Dataset_Typhoon_KGraph(Dataset):
         # scale NWP data and target data if needed
         self.scaler = StandardScaler()
         if self.scale:
-            cols_data = df_raw.columns[1:-4] # id column tryples are not needed
+            cols_data = df_raw.columns[1:-4] # id column and triples are not needed
             norm_data = df_raw[cols_data]
             self.scaler.fit(norm_data.values)
             df_raw[cols_data] = self.scaler.transform(norm_data.values)
 
-        # columns = ['10','4','5','6','7', #NWP 0-4
-        #             'power_unit']      #power 5
+        # 处理时间戳
+        df_one_station = df_raw[df_raw.id == 0]
+        df_stamp = df_one_station[['date']]
+        df_stamp['date'] = pd.to_datetime(df_stamp['date'])
 
-        border1s = [0, 635 * 24 * 4 - self.seq_len, 635 * 24 * 4 + 20 * 24 * 4 - self.seq_len]
-        border2s = [635 * 24 * 4, 635 * 24 * 4 + 20 * 24 * 4, 787 * 24 * 4]
-        border1 = border1s[self.set_type]
-        border2 = border2s[self.set_type]
         # data only
         cols_data = df_raw.columns[1:]
         df_data = df_raw[cols_data]
-        # time stamp only
-        df_one_station = df_raw[df_raw.id == 0]
-        df_stamp = df_one_station[['date']][border1:border2]
-        df_stamp['date'] = pd.to_datetime(df_stamp.date)
-
 
         if self.timeenc == 0:
             df_stamp['month'] = df_stamp.date.apply(lambda row: row.month, 1)
@@ -817,25 +809,63 @@ class Dataset_Typhoon_KGraph(Dataset):
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
 
-        all_data = []
+        # columns = ['10','4','5','6','7', #NWP 0-4
+        #             'power_unit']      #power 5
 
-        for station_id in df_data.id.unique():
-            if self.id is not None and station_id not in self.id:
-                continue
-
-            data_ = df_data[df_data.id == station_id][border1:border2]
-            data_np = data_.drop(columns=['id']).values
-            all_data.append(data_np)
-
-        data = np.array(all_data) # shape: [num_station, num_time, num_feature]
-        self.data_x = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
-        self.data_y = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+        self.seq_x = []
+        self.seq_y = []
 
 
-        # if self.set_type == 0 and self.args.augmentation_ratio > 0:
-        #     self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
+        for typhoon_name, typhoon_date in self.typhoon.items():
+            start_time = datetime.strptime(typhoon_date[0], "%Y-%m-%d")
+            end_time = datetime.strptime(typhoon_date[1], "%Y-%m-%d") + timedelta(days=1)
+            start_index = df_one_station[df_one_station.date == start_time].index[0]
+            end_index = df_one_station[df_one_station.date == end_time].index[0]
 
-        self.data_stamp = data_stamp
+            for station_id in df_data.id.unique():
+                if self.id is not None and station_id not in self.id:
+                    continue
+
+                data_ = df_data[df_data.id == station_id][start_index:end_index]
+                data_np = data_.drop(columns=['id']).values
+                all_data.append(data_np)# 一个台风所有场站的数据
+
+            data = np.array(all_data)  # shape: [num_station, num_time, num_feature]
+            self.data_x = data.transpose((2, 0, 1))  # shape: [num_feature, num_station, num_time]
+            self.data_y = data.transpose((2, 0, 1))  # shape: [num_feature, num_station, num_time]
+
+
+
+
+
+            # 创建空的dataFrame
+            df_data = pd.DataFrame()
+            for station_id in df_raw.id.unique():
+                if self.id is not None and station_id not in self.id:
+                    continue
+                # 取出当前站点的数据
+                df_station = df_raw[df_raw.id == station_id]
+                # 按列合并所有站点的数据
+                df_data = pd.concat([df_data, df_station], axis=1)
+            # 丢掉重复的 date 列
+            df_data = df_data.loc[:, ~df_data.columns.str.contains('date') | ~df_data.columns.duplicated()]
+
+            # 丢掉所有的 id 列
+            df_data = df_data.drop(['id'], axis=1, errors='ignore')  # 使用 errors='ignore' 确保如果没有 'id' 列时不报错
+
+
+            # 处理一个台风期间的样本
+            for i in range(start_index, end_index - self.pred_len - self.seq_len):
+                s_begin = i
+                s_end = s_begin + self.seq_len
+                r_begin = s_end - self.label_len
+                r_end = r_begin + self.pred_len + self.label_len
+                seq_x = df_data.iloc[s_begin:s_end].drop(['date'], 1).values
+                seq_y = df_data.iloc[r_begin:r_end].drop(['date'], 1).values
+
+                self.seq_x.append(seq_x)
+                self.seq_y.append(seq_y)
+
 
 
 
