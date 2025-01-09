@@ -812,8 +812,8 @@ class Dataset_Typhoon_KGraph(Dataset):
         # columns = ['10','4','5','6','7', #NWP 0-4
         #             'power_unit']      #power 5
 
-        self.seq_x = []
-        self.seq_y = []
+        self.data_x = []
+        self.data_y = []
 
 
         for typhoon_name, typhoon_date in self.typhoon.items():
@@ -822,37 +822,16 @@ class Dataset_Typhoon_KGraph(Dataset):
             start_index = df_one_station[df_one_station.date == start_time].index[0]
             end_index = df_one_station[df_one_station.date == end_time].index[0]
 
+            all_data = []
             for station_id in df_data.id.unique():
                 if self.id is not None and station_id not in self.id:
                     continue
 
-                data_ = df_data[df_data.id == station_id][start_index:end_index]
+                data_ = df_data[df_data.id == station_id]
                 data_np = data_.drop(columns=['id']).values
                 all_data.append(data_np)# 一个台风所有场站的数据
 
             data = np.array(all_data)  # shape: [num_station, num_time, num_feature]
-            self.data_x = data.transpose((2, 0, 1))  # shape: [num_feature, num_station, num_time]
-            self.data_y = data.transpose((2, 0, 1))  # shape: [num_feature, num_station, num_time]
-
-
-
-
-
-            # 创建空的dataFrame
-            df_data = pd.DataFrame()
-            for station_id in df_raw.id.unique():
-                if self.id is not None and station_id not in self.id:
-                    continue
-                # 取出当前站点的数据
-                df_station = df_raw[df_raw.id == station_id]
-                # 按列合并所有站点的数据
-                df_data = pd.concat([df_data, df_station], axis=1)
-            # 丢掉重复的 date 列
-            df_data = df_data.loc[:, ~df_data.columns.str.contains('date') | ~df_data.columns.duplicated()]
-
-            # 丢掉所有的 id 列
-            df_data = df_data.drop(['id'], axis=1, errors='ignore')  # 使用 errors='ignore' 确保如果没有 'id' 列时不报错
-
 
             # 处理一个台风期间的样本
             for i in range(start_index, end_index - self.pred_len - self.seq_len):
@@ -860,44 +839,42 @@ class Dataset_Typhoon_KGraph(Dataset):
                 s_end = s_begin + self.seq_len
                 r_begin = s_end - self.label_len
                 r_end = r_begin + self.pred_len + self.label_len
-                seq_x = df_data.iloc[s_begin:s_end].drop(['date'], 1).values
-                seq_y = df_data.iloc[r_begin:r_end].drop(['date'], 1).values
+                seq_x = data[:, s_begin:s_end, :]
+                seq_y = data[:, r_begin:r_end, :]
 
-                self.seq_x.append(seq_x)
-                self.seq_y.append(seq_y)
+                self.data_x.append(seq_x) # shape: [samples, num_station, seq_len, num_feature]
+                self.data_y.append(seq_y) # shape: [samples, num_station, pred_len + label_len, num_feature]
 
 
 
 
 
     def __getitem__(self, index):
-        s_begin = index
-        s_end = s_begin + self.seq_len
-        r_begin = s_end - self.label_len
-        r_end = r_begin + self.label_len + self.pred_len
-
-        seq_x = self.data_x[:-3, :, s_begin:s_end]
-        seq_y = self.data_y[:-3, :, r_begin:r_end]
+        seq_x_ = self.data_x[index, :, :, :-3] # shape: [num_station, seq_len, num_feature - 3]
+        seq_y_ = self.data_y[index, :, :, :-3] # shape: [num_station, pred_len + label_len, num_feature - 3]
         adj = self.const.adj_mx
 
-        embedding_head_id_x = self.data_x[-3, :, s_begin:s_end]
-        embedding_head_id_y = self.data_y[-3, :, r_begin:r_end]
-        embedding_head_x = self.entity_embeddings(torch.tensor(embedding_head_id_x, dtype=torch.int))
-        embedding_head_y = self.entity_embeddings(torch.tensor(embedding_head_id_y, dtype=torch.int))
+        embedding_head_id_x = self.data_x[index, :, :, -3]
+        embedding_head_id_y = self.data_y[index, :, :, -3]
+        embedding_head_x = self.entity_embeddings(torch.tensor(embedding_head_id_x, dtype=torch.int)) # shape: [num_station, seq_len, embed_dim]
+        embedding_head_y = self.entity_embeddings(torch.tensor(embedding_head_id_y, dtype=torch.int)) # shape: [num_station, pred_len + label_len, embed_dim]
 
-        embedding_relation_id_x = self.data_x[-2, :, s_begin:s_end]
-        embedding_relation_id_y = self.data_y[-2, :, r_begin:r_end]
-        embedding_relation_x = self.entity_embeddings(torch.tensor(embedding_relation_id_x, dtype=torch.int))
-        embedding_relation_y = self.entity_embeddings(torch.tensor(embedding_relation_id_y, dtype=torch.int))
+        embedding_relation_id_x = self.data_x[index, :, :, -2]
+        embedding_relation_id_y = self.data_y[index, :, :, -2]
+        embedding_relation_x = self.entity_embeddings(torch.tensor(embedding_relation_id_x, dtype=torch.int)) # shape: [num_station, seq_len, embed_dim]
+        embedding_relation_y = self.entity_embeddings(torch.tensor(embedding_relation_id_y, dtype=torch.int)) # shape: [num_station, pred_len + label_len, embed_dim]
 
         embedding_x = torch.cat([embedding_head_x, embedding_relation_x], dim=2)
         embedding_y = torch.cat([embedding_head_y, embedding_relation_y], dim=2)
+
+        seq_x = seq_x_.transpose((2, 0, 1))
+        seq_y = seq_y_.transpose((2, 0, 1))
         embedding_x = embedding_x.permute(2, 0, 1).data.numpy()
         embedding_y = embedding_y.permute(2, 0, 1).data.numpy()
         return seq_x, seq_y, adj, embedding_x, embedding_y
 
     def __len__(self):
-        return self.data_x.shape[2] - self.seq_len - self.pred_len + 1
+        return len(self.data_x)
 
     def inverse_transform(self, data):
         out = data * self.scaler.scale_[-1] + self.scaler.mean_[-1]
