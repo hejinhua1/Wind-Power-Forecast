@@ -140,5 +140,8 @@ vision/
 dataset/
 data/*.feather
 data/*.csv
+data/*.pth
+data/*.pkl
+data/*.png
 results/
 test_results/
