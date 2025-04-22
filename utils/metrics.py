@@ -30,6 +30,21 @@ def MAPE(pred, true):
 def MSPE(pred, true):
     return np.mean(np.square((true - pred) / true))
 
+def R2_score(ypred, ytrue):
+    """
+    计算R2_score
+
+    参数：
+    ypred (numpy.ndarray): 预测值的数组
+    ytrue (numpy.ndarray): 真实值的数组
+
+    返回：
+    float: R2_score
+    """
+    ytrue = np.array(ytrue).ravel()
+    ypred = np.array(ypred).ravel()
+    r2_score = 1 - np.sum(np.square(ypred - ytrue)) / np.sum(np.square(ytrue - np.mean(ytrue)))
+    return r2_score
 
 def metric(pred, true):
     mae = MAE(pred, true)
