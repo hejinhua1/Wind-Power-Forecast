@@ -1,4 +1,5 @@
 from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph
+from torch.utils.data import DataLoader
 from models.SpatioTemporalGraph import Model
 from utils.tools import EarlyStopping, adjust_learning_rate, visual
 from utils.losses import mse_loss, mape_loss, mase_loss, smape_loss, WeightedMSELoss, DiffLoss
@@ -11,8 +12,6 @@ from datetime import datetime
 import time
 import warnings
 import numpy as np
-from utils.dtw_metric import dtw, accelerated_dtw
-from utils.augmentation import run_augmentation, run_augmentation_single
 
 warnings.filterwarnings('ignore')
 
@@ -178,6 +177,7 @@ def test(self, setting, test=0):
 if __name__ == '__main__':
     class Config:
         def __init__(self):
+            self.train_epochs = 20
             self.in_channels = 6
             self.hidden_channels = 16
             self.out_channels = 1
@@ -194,12 +194,13 @@ if __name__ == '__main__':
     args = Config()
 
     # 迭代次数和检查点保存间隔
-    epoch_size, batch_size = 50, 50
+    batch_size = 64
     checkpoint_interval = 1
+    datatype = 'normal'
     checkpoint_prefix = 'KGformer_'
-    log_path = "/home/hjh/Tyformer/logs/Pangu_h{}_log"
+    log_path = "/home/hjh/WindPowerForecast/logs/KGformer_log"
     # 设置检查点路径和文件名前缀
-    checkpoint_path = "/home/hjh/Tyformer/checkpoints/"
+    checkpoint_path = "/home/hjh/WindPowerForecast/checkpoints/"
     # Get the current date and time
     current_datetime = datetime.now()
     # Format the current date and time to display only hours and minutes
@@ -215,60 +216,46 @@ if __name__ == '__main__':
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=epoch_size, verbose=True)
     criterion = nn.MSELoss()
 
-
-    trainset = Dataset_KGraph(args, flag='train', Norm_type='minmax', M=9, N=9)
+    time_now = time.time()
+    trainset = Dataset_KGraph(flag='train')
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    valiset = WindDataset(flag='vali', Norm_type=Norm_type, M=M, N=N)
+    valiset = Dataset_KGraph(flag='vali')
     valiloader = DataLoader(valiset, batch_size=batch_size, shuffle=False)
 
     # 训练循环
     f = open(log_path + formatted_datetime + '.txt', 'a+')  # 打开文件
-    f.write('Norm_type:' + Norm_type + '\n')
+    f.write('type:' + datatype + '\n')
     f.close()
-    for epoch in range(resume_epoch+1, epoch_size + 1):
+    for epoch in range(epoch_size):
         f = open(log_path + formatted_datetime + '.txt', 'a+')  # 打开文件
-        train_l_sum, test_l_sum, n = 0.0, 0.0, 0
+        train_loss = []
+        train_l_sum, test_l_sum, iter_count = 0.0, 0.0, 0
         train_ul_sum, train_vl_sum, test_ul_sum, test_vl_sum = 0.0, 0.0, 0.0, 0.0
         model.train()
-        loop = tqdm((trainloader), total=len(trainloader))
-        for (x, y) in loop: # x,y torch.Size([B, M, 6, 13, 41, 61])
-            ########################################################
-            x = x[:, :, :, :, :32, :32] # torch.Size([B, M, 6, 13, 32, 32])
-            x = x.permute(0, 1, 3, 4, 5, 2).contiguous() # torch.Size([B, M, 13, 32, 32, 6])
-            x = rearrange(x, 'b M v h w c -> b (M v) h w c')
-            # print('Input:', get_memory_diff())
-            y = y[:, N-24:N, 3:5, -1, :32, :32] # torch.Size([B, N, 2, 32, 32])
-            x = x.to(device)
-            y = y.to(device)
-            y_hat = model(x)
-            # print('Output and intermediate:', get_memory_diff())
-            ########################################################
-            u_loss = criterion(y_hat[:, :, 0, :, :], y[:, :, 0, :, :])
-            v_loss = criterion(y_hat[:, :, 1, :, :], y[:, :, 1, :, :])
-            loss = weighted_loss(u_loss, v_loss)
+        for i, (batch_x, batch_y, batch_adj, batch_em_x, batch_em_y) in enumerate(train_loader):
+            iter_count += 1
             opt.zero_grad()
+            batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args.pred_len:]
+            batch_x = torch.cat([batch_x, batch_em_y[:, :, :, -args.pred_len:]], dim=1)
+            batch_x = batch_x.float().to(device)
+            batch_y = batch_y.float().to(device)
+            batch_adj = batch_adj.float().to(device)
+            batch_adj_hat = torch.zeros_like(batch_adj).float().to(device)
+            ########################################################
+            outputs = model(batch_x, batch_adj, batch_adj_hat)
+            batch_y = batch_y[:, -1, :, -args.pred_len:].to(device)
+            loss = criterion(outputs, batch_y)
+            train_loss.append(loss.item())
+            if (i + 1) % 100 == 0:
+                print("\titers: {0}, epoch: {1} | loss: {2:.7f}".format(i + 1, epoch + 1, loss.item()))
+                speed = (time.time() - time_now) / iter_count
+                left_time = speed * ((args.train_epochs - epoch) * train_steps - i)
+                print('\tspeed: {:.4f}s/iter; left time: {:.4f}s'.format(speed, left_time))
+                iter_count = 0
+                time_now = time.time()
+
             loss.backward()
             opt.step()
-            # y_raw, y_hat_raw = y.detach().cpu().numpy(), y_hat.detach().cpu().numpy()
-            # u_raw, u_hat_raw = normalizer.inverse_target(y_raw[:, :24, :, :], y_hat_raw[:, :24, :, :], target='u', Norm_type=Norm_type)
-            # v_raw, v_hat_raw = normalizer.inverse_target(y_raw[:, 24:, :, :], y_hat_raw[:, 24:, :, :], target='v', Norm_type=Norm_type)
-            # u_loss = criterion(torch.from_numpy(u_raw), torch.from_numpy(u_hat_raw))
-            # v_loss = criterion(torch.from_numpy(v_raw), torch.from_numpy(v_hat_raw))
-            # loss = weighted_loss(u_loss, v_loss)
-            # loss_num = loss.numpy()
-            # loop.set_description(f'Train Epoch: [{epoch}/{epoch_size}] loss: [{loss_num}]')
-            # train_l_sum += loss_num*x.shape[0]
-            # train_ul_sum += u_loss*x.shape[0]
-            # train_vl_sum += v_loss*x.shape[0]
-            loss_num = loss.detach().cpu().numpy()
-            loop.set_description(f'Train Epoch: [{epoch}/{epoch_size}] loss: [{loss_num}]')
-            train_l_sum += loss_num*x.shape[0]
-            train_ul_sum += u_loss.detach().cpu().numpy()*x.shape[0]
-            train_vl_sum += v_loss.detach().cpu().numpy()*x.shape[0]
-            n += x.shape[0]
-        train_loss = train_l_sum / n
-        train_u_loss = train_ul_sum / n
-        train_v_loss = train_vl_sum / n
 
 
         n = 0

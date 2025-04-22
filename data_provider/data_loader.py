@@ -547,7 +547,7 @@ class Dataset_KGraph(Dataset):
     Dataset for KGraph, which is a knowledge-graph-aided model for spatio-temporal forecasting.
     input data: NWP data, target data, and knowledge graph embedding
     '''
-    def __init__(self, args, root_path, flag='train', size=None,
+    def __init__(self, args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data_with_entity_id.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
         # size [seq_len, label_len, pred_len]
