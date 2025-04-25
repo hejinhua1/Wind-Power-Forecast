@@ -97,4 +97,5 @@ nwp_data[['entity1', 'relation', 'entity2']] = data.apply(compute_triples, axis=
 
 # 保存数据
 print("Saving data with entity IDs...")
-nwp_data.to_feather('data_with_entity_id.feather')
+# nwp_data.to_feather('data_with_entity_id.feather')
+nwp_data.reset_index(drop=True).to_feather('data_with_entity_id.feather')
