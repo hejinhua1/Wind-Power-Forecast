@@ -3,6 +3,7 @@ import numpy as np
 import random
 import torch
 import torch.nn as nn
+import torch.nn.functional as F  # 添加这行
 import torch.optim as optim
 from sklearn.model_selection import train_test_split
 
@@ -28,9 +29,9 @@ class TransEModel(nn.Module):
         return torch.relu(self.margin + pos_distance - neg_distance).mean()
 
     def _distance(self, triplets):
-        head = self.entity_embeddings(triplets[:, 0])
-        relation = self.relation_embeddings(triplets[:, 1])
-        tail = self.entity_embeddings(triplets[:, 2])
+        head = F.normalize(self.entity_embeddings(triplets[:, 0]), p=2, dim=1)  # L2归一化
+        relation = F.normalize(self.relation_embeddings(triplets[:, 1]), p=2, dim=1)
+        tail = F.normalize(self.entity_embeddings(triplets[:, 2]), p=2, dim=1)
         return torch.norm(head + relation - tail, p=self.p, dim=1)
 
 
