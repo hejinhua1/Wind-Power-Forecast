@@ -1,3 +1,5 @@
+import sys
+sys.path.append("..")
 from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph
 from torch.utils.data import DataLoader
 from models.SpatioTemporalGraph import Model
@@ -22,7 +24,7 @@ if __name__ == '__main__':
     class Config:
         def __init__(self):
             self.train_epochs = 20
-            self.in_channels = 6
+            self.in_channels = 26
             self.hidden_channels = 16
             self.out_channels = 1
             self.timestep_max = 96
@@ -64,7 +66,7 @@ if __name__ == '__main__':
     time_now = time.time()
     trainset = Dataset_KGraph(flag='train')
     train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    valiset = Dataset_KGraph(flag='vali')
+    valiset = Dataset_KGraph(flag='val')
     vali_loader = DataLoader(valiset, batch_size=batch_size, shuffle=False)
 
     # 训练循环
@@ -141,15 +143,15 @@ if __name__ == '__main__':
                     input = batch_x.detach().cpu().numpy()
                     if valiset.scale:
                         input = valiset.inverse_transform(input)
-                    gt = np.concatenate((input[0, -1, -1, :], true[0, -1, :]), axis=0)
-                    pd = np.concatenate((input[0, -1, -1, :], pred[0, -1, :]), axis=0)
+                    gt = np.concatenate((input[0, 5, -1, :], true[0, -1, :]), axis=0) # 取最后一个风电场的风电功率
+                    pd = np.concatenate((input[0, 5, -1, :], pred[0, -1, :]), axis=0) # 取最后一个风电场的风电功率
                     visual(gt, pd, os.path.join(result_path, str(i) + '.pdf'))
             f.write('Iter: ' + str(epoch) + ' ' + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + '\n')
         lr_scheduler.step()
         print("第%d个epoch的学习率：%f" % (epoch, opt.param_groups[0]['lr']))
         if epoch % checkpoint_interval == 0:
             # 保存模型检查点
-            checkpoint_name = checkpoint_prefix + str(epoch) + '.pt'
+            checkpoint_name = checkpoint_prefix + datatype + '_epoch_' + str(epoch) + '.pt'
             model_path = os.path.join(checkpoint_path, checkpoint_name)
             torch.save({
                 'epoch': epoch,
