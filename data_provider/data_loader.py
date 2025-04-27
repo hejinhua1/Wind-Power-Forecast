@@ -711,7 +711,7 @@ class Dataset_Typhoon_KGraph(Dataset):
     Dataset for KGraph during typhoon, which is a knowledge-graph-aided model for spatio-temporal forecasting.
     input data: NWP data, target data, and knowledge graph embedding
     '''
-    def __init__(self, args, root_path, flag='train', size=None,
+    def __init__(self, args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data_with_entity_id.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
         # size [seq_len, label_len, pred_len]
@@ -789,7 +789,7 @@ class Dataset_Typhoon_KGraph(Dataset):
             df_raw[cols_data] = self.scaler.transform(norm_data.values)
 
         # 处理时间戳
-        df_one_station = df_raw[df_raw.id == 0]
+        df_one_station = df_raw[df_raw.id == 0].reset_index(drop=True)
         df_stamp = df_one_station[['date']]
         df_stamp['date'] = pd.to_datetime(df_stamp['date'])
 
@@ -845,6 +845,8 @@ class Dataset_Typhoon_KGraph(Dataset):
                 self.data_x.append(seq_x) # shape: [samples, num_station, seq_len, num_feature]
                 self.data_y.append(seq_y) # shape: [samples, num_station, pred_len + label_len, num_feature]
 
+        self.data_x = np.array(self.data_x)  # shape: [samples, num_station, seq_len, num_feature]
+        self.data_y = np.array(self.data_y)  # shape: [samples, num_station, pred_len + label_len, num_feature]
 
 
 
@@ -894,7 +896,10 @@ if __name__ == '__main__':
     # dataset = Dataset_WindPower(args=None, root_path='../data/', flag='train', size=None,
     #              features='M', data_path='data.feather',
     #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
-    dataset = Dataset_KGraph(args=None, root_path='../data/', flag='train', size=None,
+    # dataset = Dataset_KGraph(args=None, root_path='../data/', flag='train', size=None,
+    #              features='M', data_path='data_with_entity_id.feather',
+    #              target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
+    dataset = Dataset_Typhoon_KGraph(args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data_with_entity_id.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None)
     x = dataset[0]
