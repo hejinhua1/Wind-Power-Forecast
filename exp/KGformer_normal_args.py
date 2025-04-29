@@ -1,5 +1,6 @@
 import sys
 sys.path.append("..")
+import argparse
 from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph
 from torch.utils.data import DataLoader
 from models.SpatioTemporalGraph import Model
@@ -21,26 +22,28 @@ warnings.filterwarnings('ignore')
 
 
 if __name__ == '__main__':
-    class Config:
-        def __init__(self):
-            self.train_epochs = 20
-            self.in_channels = 26
-            self.hidden_channels = 96
-            self.out_channels = 1
-            self.timestep_max = 96
-            self.nb_blocks = 2
-            self.channels_last = False
-            self.show_scores = False
-            self.task_name = 'KGformer'
-            self.seq_len = 96
-            self.label_len = 48
-            self.pred_len = 96
-            self.num_nodes = 9
 
-    args = Config()
-
+    parser = argparse.ArgumentParser(description='KGformer for Wind Power Forecasting')
+    parser.add_argument('--in_channels', type=int, default=26, help='input feature size')
+    parser.add_argument('--hidden_channels', type=int, default=16, help='hidden size')
+    parser.add_argument('--out_channels', type=int, default=1, help='output size')
+    parser.add_argument('--timestep_max', type=int, default=96, help='input sequence length')
+    parser.add_argument('--nb_blocks', type=int, default=2, help='num of blocks of multihead attention')
+    parser.add_argument('--channels_last', type=bool, default=False, help='input data format')
+    parser.add_argument('--show_scores', type=bool, default=False, help='show scores of attention')
+    parser.add_argument('--task_name', type=str, default='KGformer', help='exp description')
+    parser.add_argument('--seq_len', type=int, default=96, help='input sequence length')
+    parser.add_argument('--label_len', type=int, default=48, help='start token length')
+    parser.add_argument('--pred_len', type=int, default=96, help='prediction sequence length')
+    parser.add_argument('--num_nodes', type=int, default=9, help='num of nodes')
+    parser.add_argument('--num_node_features', type=int, default=6, help='num of node features')
+    parser.add_argument('--gcn_layers', type=int, default=3, help='num of gcn layers')
+    parser.add_argument('--train_epochs', type=int, default=10, help='train epochs')
+    parser.add_argument('--batch_size', type=int, default=32, help='batch size of train input data')
+    parser.add_argument('--patience', type=int, default=3, help='early stopping patience')
+    parser.add_argument('--learning_rate', type=float, default=0.0001, help='optimizer learning rate')
+    args = parser.parse_args()
     # 迭代次数和检查点保存间隔
-    batch_size = 64
     checkpoint_interval = 1
     datatype = 'normal'
     checkpoint_prefix = 'KGformer_'
@@ -58,16 +61,16 @@ if __name__ == '__main__':
 
     # 模型定义和训练
     model = Model(args).to(device)
-    opt = optim.Adam(model.parameters(), lr=5e-4)
+    opt = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.train_epochs, verbose=True)
     criterion = nn.MSELoss()
 
     time_now = time.time()
     trainset = Dataset_KGraph(flag='train')
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
     valiset = Dataset_KGraph(flag='val')
-    vali_loader = DataLoader(valiset, batch_size=batch_size, shuffle=False)
+    vali_loader = DataLoader(valiset, batch_size=args.batch_size, drop_last=True, shuffle=False)
 
     # 训练循环
     f = open(log_path + formatted_datetime + '_.txt', 'a+')  # 打开文件

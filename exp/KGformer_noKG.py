@@ -1,6 +1,6 @@
 import sys
 sys.path.append("..")
-from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph
+from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph, Dataset_Typhoon_KGraph
 from torch.utils.data import DataLoader
 from models.SpatioTemporalGraph import Model
 from utils.tools import EarlyStopping, adjust_learning_rate, visual
@@ -24,8 +24,8 @@ if __name__ == '__main__':
     class Config:
         def __init__(self):
             self.train_epochs = 20
-            self.in_channels = 26
-            self.hidden_channels = 96
+            self.in_channels = 6
+            self.hidden_channels = 16
             self.out_channels = 1
             self.timestep_max = 96
             self.nb_blocks = 2
@@ -42,9 +42,9 @@ if __name__ == '__main__':
     # 迭代次数和检查点保存间隔
     batch_size = 64
     checkpoint_interval = 1
-    datatype = 'normal'
+    datatype = 'noKG'
     checkpoint_prefix = 'KGformer_'
-    log_path = "/home/hjh/WindPowerForecast/logs/KGformer_log_"
+    log_path = "/home/hjh/WindPowerForecast/logs/KGformer_noKG_log_"
     result_dir = '/home/hjh/WindPowerForecast/test_results/'
     # 设置检查点路径和文件名前缀
     checkpoint_path = "/home/hjh/WindPowerForecast/checkpoints/"
@@ -85,7 +85,7 @@ if __name__ == '__main__':
             iter_count += 1
             opt.zero_grad()
             batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args.pred_len:]
-            batch_x = torch.cat([batch_x, batch_em_y[:, :, :, -args.pred_len:]], dim=1)
+
             batch_x = batch_x.float().to(device)
             batch_y = batch_y.float().to(device)
             batch_adj = batch_adj.float().to(device)
@@ -119,7 +119,7 @@ if __name__ == '__main__':
         with torch.no_grad():
             for i, (batch_x, batch_y, batch_adj, batch_em_x, batch_em_y) in enumerate(vali_loader):
                 batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args.pred_len:]
-                batch_x = torch.cat([batch_x, batch_em_y[:, :, :, -args.pred_len:]], dim=1)
+
                 batch_x = batch_x.float().to(device)
                 batch_y = batch_y.float().to(device)
                 batch_adj = batch_adj.float().to(device)

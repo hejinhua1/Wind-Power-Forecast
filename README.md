@@ -17,3 +17,9 @@ or you can run the following commands to train the graph-based models:
 bash ./scripts/Graph_forecast/GCN_STGraph.sh
 bash ./scripts/Graph_forecast/GAT_STGraph.sh
 ```
+
+or you can run the following commands to train our models:
+```bash
+cd exp
+bash ../scripts/KGraph_forecast/KGnormal.sh
+```bash
