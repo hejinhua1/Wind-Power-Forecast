@@ -69,7 +69,7 @@ if __name__ == '__main__':
     time_now = time.time()
     trainset = Dataset_KGraph(flag='train')
     train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
-    valiset = Dataset_KGraph(flag='val')
+    valiset = Dataset_KGraph(flag='test')
     vali_loader = DataLoader(valiset, batch_size=args.batch_size, drop_last=True, shuffle=False)
 
     # 训练循环

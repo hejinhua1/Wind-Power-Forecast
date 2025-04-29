@@ -19,7 +19,7 @@ from data.train_knowledge_graph import TransEModel
 
 
 class Dataset_WindPower(Dataset):
-    def __init__(self, args, root_path, flag='train', size=None,
+    def __init__(self, args=None, root_path='../data/', flag='train', size=None,
                  features='M', data_path='data.feather',
                  target='power_unit', scale=True, timeenc=0, freq='t', seasonal_patterns=None, id=None):
         # size [seq_len, label_len, pred_len]

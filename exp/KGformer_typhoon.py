@@ -23,9 +23,9 @@ warnings.filterwarnings('ignore')
 if __name__ == '__main__':
     class Config:
         def __init__(self):
-            self.train_epochs = 20
+            self.train_epochs = 10
             self.in_channels = 26
-            self.hidden_channels = 16
+            self.hidden_channels = 96
             self.out_channels = 1
             self.timestep_max = 96
             self.nb_blocks = 2
@@ -36,11 +36,12 @@ if __name__ == '__main__':
             self.label_len = 48
             self.pred_len = 96
             self.num_nodes = 9
+            self.learning_rate = 0.0001
+            self.batch_size = 32
 
     args = Config()
 
     # 迭代次数和检查点保存间隔
-    batch_size = 64
     checkpoint_interval = 1
     datatype = 'typhoon'
     checkpoint_prefix = 'KGformer_'
@@ -58,16 +59,16 @@ if __name__ == '__main__':
 
     # 模型定义和训练
     model = Model(args).to(device)
-    opt = optim.Adam(model.parameters(), lr=5e-4)
+    opt = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.train_epochs, verbose=True)
     criterion = nn.MSELoss()
 
     time_now = time.time()
     trainset = Dataset_Typhoon_KGraph(flag='train')
-    train_loader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
-    valiset = Dataset_Typhoon_KGraph(flag='val')
-    vali_loader = DataLoader(valiset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(trainset, batch_size=args.batch_size, shuffle=True)
+    valiset = Dataset_Typhoon_KGraph(flag='test')
+    vali_loader = DataLoader(valiset, batch_size=args.batch_size, shuffle=False, drop_last=True)
 
     # 训练循环
     f = open(log_path + formatted_datetime + '_.txt', 'a+')  # 打开文件
