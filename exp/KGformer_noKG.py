@@ -23,12 +23,12 @@ warnings.filterwarnings('ignore')
 if __name__ == '__main__':
     class Config:
         def __init__(self):
-            self.train_epochs = 10
+            self.train_epochs = 20
             self.in_channels = 6
-            self.hidden_channels = 16
+            self.hidden_channels = 8
             self.out_channels = 1
             self.timestep_max = 96
-            self.nb_blocks = 2
+            self.nb_blocks = 1
             self.channels_last = False
             self.show_scores = False
             self.task_name = 'KGformer'
@@ -36,8 +36,8 @@ if __name__ == '__main__':
             self.label_len = 48
             self.pred_len = 96
             self.num_nodes = 9
-            self.learning_rate = 0.0001
-            self.batch_size = 32
+            self.learning_rate = 0.01
+            self.batch_size = 16
 
     args = Config()
 
