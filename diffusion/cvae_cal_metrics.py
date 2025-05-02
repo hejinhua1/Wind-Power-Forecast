@@ -16,6 +16,7 @@ from scipy import integrate
 import os
 from diffusion_sde_test import marginal_prob_mean, marginal_prob_std, diffusion_coeff
 from diffusion_sde_test import ScoreNet
+from cvae_train import CVAE
 import matplotlib.pyplot as plt
 
 import sys
@@ -102,24 +103,26 @@ if __name__ == '__main__':
             self.pred_len = 96
             self.num_nodes = 9
             self.learning_rate = 0.0001
-            self.batch_size = 1
+            self.batch_size = 96
 
             self.cond_channels = 26 * 9
 
     args_withKG = Config()
     num_steps = 500
-    sample_batch_size = 100
+    sample_batch_size = 50
+    input_dim = 9*96
+    label_dim = 9*96
     # 设置检查点路径和文件名前缀
-    sde_result_dir = '/home/hjh/WindPowerForecast/test_results/sde'
-    if not os.path.exists(sde_result_dir):
-        os.makedirs(sde_result_dir)
+    cvae_result_dir = '/home/hjh/WindPowerForecast/test_results/cvae'
+    if not os.path.exists(cvae_result_dir):
+        os.makedirs(cvae_result_dir)
     checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_3.pt"
-    sde_model_path = '/home/hjh/WindPowerForecast/sde_checkpoints/sde_1.pth'
+    cvae_model_path = '/home/hjh/WindPowerForecast/cvae_checkpoints/cvae_10.pth'
     checkpoint_withKG = torch.load(checkpoint_path_withKG)
     # 保存模型的路径
-    sde_model_dir = '/home/hjh/WindPowerForecast/sde_checkpoints'  # 保存模型的目录
-    if not os.path.exists(sde_model_dir):
-        os.makedirs(sde_model_dir)
+    cvae_model_dir = '/home/hjh/WindPowerForecast/cvae_checkpoints'  # 保存模型的目录
+    if not os.path.exists(cvae_model_dir):
+        os.makedirs(cvae_model_dir)
     # 设置GPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -127,13 +130,13 @@ if __name__ == '__main__':
     model_withKG = Model(args_withKG).to(device)
     model_withKG.load_state_dict(checkpoint_withKG['model_state_dict'])
 
-    sde_checkpoint = torch.load(sde_model_path, map_location=device)
-    score_model = ScoreNet(marginal_prob_std=marginal_prob_std, cond_channels=args_withKG.cond_channels).to(device)
-    score_model.load_state_dict(sde_checkpoint)
-    sampler = Euler_Maruyama_sampler
+    cvae_checkpoint = torch.load(cvae_model_path, map_location=device)
+    cvae_model = CVAE(input_dim=input_dim, label_dim=label_dim).to(device)
+    cvae_model.load_state_dict(cvae_checkpoint)
 
     valiset = Dataset_Typhoon_KGraph(flag='test')
-    vali_loader = DataLoader(valiset, batch_size=args_withKG.batch_size, shuffle=False, drop_last=True)
+    # valiset = Dataset_KGraph(flag='test')
+    vali_loader = DataLoader(valiset, batch_size=args_withKG.batch_size, shuffle=False, drop_last=False)
 
     model_withKG.eval()
     erros = []
@@ -170,37 +173,38 @@ if __name__ == '__main__':
             else:
                 condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(pred_withKG, axis=1), condition_[:, 6:, :, :]], axis=1)
             condition = torch.from_numpy(condition).float().to(device)
-            batch_condition = condition.repeat(sample_batch_size, 1, 1, 1)
-            batch_condition = batch_condition.reshape(batch_condition.shape[0], -1, batch_condition.shape[3])
+
 
             # 开始进行条件采样
-            samples = sampler(score_model,
-                              marginal_prob_mean,
-                              marginal_prob_std,
-                              diffusion_coeff,
-                              batch_condition=batch_condition,
-                              batch_size=sample_batch_size,
-                              num_steps=num_steps,
-                              device='cuda')
+            final_pred_samples = []
+            for _ in range(sample_batch_size):
+                batch_conditioning = condition[:, 5, :, :].view(-1, label_dim).to(device)
+                z = torch.randn(args_withKG.batch_size, 20).to(device)
+                z_cond = torch.cat([z, batch_conditioning], dim=1)
+                samples = cvae_model.decoder(z_cond).view(args_withKG.batch_size, 9, 96)
 
-            errors = samples.clamp(-0.5, 0.5)  #[sample_batch_size, 9, 96]
+                errors = samples.clamp(-0.5, 0.5)  #[batch_size, 9, 96]
 
-            final_pred_samples = pred_withKG + errors.detach().cpu().numpy() #[sample_batch_size, 9, 96]
-            final_pred = final_pred_samples.mean(axis=0)  #[9, 96]
-            final_true = true[0, :, :]  #[9, 96]
+                final_pred = pred_withKG + errors.detach().cpu().numpy() #[batch_size, 9, 96]
+                final_pred_samples.append(final_pred)
 
-            for windfarm in range(9):
-                plt.figure()
-                plt.plot(final_true[windfarm, :], label='GroundTruth', linewidth=2)
-                plt.plot(final_pred[windfarm, :], label='Prediction', linewidth=2)
-                for j in range(sample_batch_size):
-                    plt.plot(final_pred_samples[j, windfarm, :], linewidth=0.2, color='gray', alpha=0.5)
-                plt.legend()
-                wind_farm_dir = os.path.join(sde_result_dir, f'windfarm_{windfarm}')
-                if not os.path.exists(wind_farm_dir):
-                    os.makedirs(wind_farm_dir)
-                ima_path = os.path.join(wind_farm_dir, f'sample_{i}.svg')
-                plt.savefig(ima_path, format='svg', bbox_inches='tight', dpi=300, facecolor='white')
+            final_pred_samples = np.array(final_pred_samples)  #[50, batch_size, 9, 96]
+            final_pred = final_pred_samples.mean(axis=0)  #[batch_size, 9, 96]
+            final_true = true  #[batch_size, 9, 96]
+
+            # 计算所有场站的平均
+            forecasts = np.mean(final_pred_samples, axis=2)  #[50, batch_size, 96]
+            observations = np.mean(final_true, axis=1)  #[batch_size, 96]
+
+            # CRPS
+            crps = CRPS(observations[:,:48], forecasts[:,:,:48], m=sample_batch_size)
+            es = ES(observations[:,:48], forecasts[:,:,:48], m=sample_batch_size)
+            vs = VS(observations[:,:48], forecasts[:,:,:48], m=sample_batch_size)
+
+            print('crps:', crps, 'es:', es, 'vs:', vs)
+
+
+
 
 
 

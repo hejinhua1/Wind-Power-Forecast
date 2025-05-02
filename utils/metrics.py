@@ -134,7 +134,7 @@ if __name__ == '__main__':
 
     # Test Case 1
     print("Test Case 1: Predictions from N(0,1), Observations are zeros")
-    n_samples = 10000  # Increased sample size for demonstration
+    n_samples = 50  # Increased sample size for demonstration
     n_obs, n_timesteps = 2, 3
     observations = np.zeros((n_obs, n_timesteps))
     forecasts = np.random.normal(0, 1, (n_samples, n_obs, n_timesteps))

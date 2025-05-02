@@ -250,7 +250,7 @@ if __name__ == '__main__':
 
     class Config:
         def __init__(self):
-            self.train_epochs = 100
+            self.train_epochs = 50
             self.in_channels = 26
             self.hidden_channels = 16
             self.out_channels = 1
@@ -316,7 +316,7 @@ if __name__ == '__main__':
             # 计算预测误差
             erro = true - pred_withKG
             condition_ = batch_x_withKG.detach().cpu().numpy()
-            condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(true, axis=1), condition_[:, 6:, :, :]], axis=1)
+            condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(pred_withKG, axis=1), condition_[:, 6:, :, :]], axis=1)
 
             erros.append(erro)
             conditions.append(condition)
