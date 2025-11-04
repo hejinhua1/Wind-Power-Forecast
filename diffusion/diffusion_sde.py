@@ -1,10 +1,5 @@
-
-import functools
-import torch
-import torch.nn as nn
+import random
 import torch.nn.functional as F
-import numpy as np
-import torch
 import functools
 from torch.optim import Adam
 from torch.utils.data import DataLoader, TensorDataset
@@ -12,10 +7,28 @@ import torchvision.transforms as transforms
 from torchvision.datasets import MNIST
 from tqdm import tqdm
 from scipy import integrate
+import sys
+sys.path.append("..")
+from data_provider.data_loader import Dataset_WindPower, Dataset_STGraph, Dataset_Typhoon, Dataset_KGraph
+from torch.utils.data import DataLoader
+from models.SpatioTemporalGraph import Model
+from utils.tools import EarlyStopping, adjust_learning_rate, visual
+from utils.losses import mse_loss, mape_loss, mase_loss, smape_loss, WeightedMSELoss, DiffLoss
+from utils.metrics import metric, R2_score, CRPS, ES, VS
+import torch
+import torch.nn as nn
+from torch import optim
 import os
+from datetime import datetime
+import time
+import warnings
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import math
 
 
-
+# 实现一个简单的sde
 
 class GaussianFourierProjection(nn.Module):
     """Gaussian random features for encoding time steps."""
@@ -39,124 +52,117 @@ class Dense(nn.Module):
         self.dense = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
-        return self.dense(x)[..., None, None]
+        return self.dense(x)[..., None]
+
+
+
+
+class CrossAttention(nn.Module):
+    def __init__(self, query_dim, cond_dim, embed_dim=256):
+        super().__init__()
+        self.query_proj = nn.Conv1d(query_dim, embed_dim, 1)
+        self.cond_proj = nn.Conv1d(cond_dim, embed_dim, 1)
+        self.key = nn.Conv1d(embed_dim, embed_dim, 1)
+        self.value = nn.Conv1d(embed_dim, embed_dim, 1)
+        self.out_proj = nn.Conv1d(embed_dim, query_dim, 1)
+
+    def forward(self, x, cond):
+        # x: [B, D, T], cond: [B, C, T]
+        query = self.query_proj(x).transpose(1, 2)  # [B, T, E]
+        cond_proj = self.cond_proj(cond)
+        key = self.key(cond_proj).transpose(1, 2)  # [B, T, E]
+        value = self.value(cond_proj).transpose(1, 2)
+
+        # 计算注意力
+        scores = torch.matmul(query, key.transpose(1, 2)) / (query.size(-1) ** 0.5)
+        attn = F.softmax(scores, dim=-1)
+        output = torch.matmul(attn, value).transpose(1, 2)  # [B, E, T]
+
+        return self.out_proj(output) + x  # 残差连接
+
+
+class ResidualBlock(nn.Module):
+    def __init__(self, dim, cond_dim):
+        super().__init__()
+        self.conv1 = nn.Conv1d(dim, dim, 3, padding=1)
+        self.conv2 = nn.Conv1d(dim, dim, 3, padding=1)
+        self.attn = CrossAttention(dim, cond_dim)
+        self.norm = nn.BatchNorm1d(dim)
+
+    def forward(self, x, cond):
+        residual = x
+        x = F.relu(self.conv1(x))
+        x = self.conv2(x)
+        x = self.attn(x, cond)
+        return self.norm(x + residual)
 
 
 class ScoreNet(nn.Module):
-    """A time-dependent score-based model built upon U-Net architecture with 3 downsampling and 3 upsampling layers."""
-
-    def __init__(self, marginal_prob_std, channels=[32, 64, 128], embed_dim=256):
-        """Initialize a time-dependent score-based network.
-
-        Args:
-          marginal_prob_std: A function that takes time t and gives the standard
-            deviation of the perturbation kernel p_{0t}(x(t) | x(0)).
-          channels: The number of channels for feature maps of each resolution.
-          embed_dim: The dimensionality of Gaussian random feature embeddings.
-        """
+    def __init__(self, marginal_prob_std, in_channels=9, cond_channels=26*9, base_dim=16*9, embed_dim=64):
         super().__init__()
         # Gaussian random feature embedding layer for time
         self.embed = nn.Sequential(GaussianFourierProjection(embed_dim=embed_dim),
                                    nn.Linear(embed_dim, embed_dim))
-        # Encoding layers where the resolution decreases
-        self.conv1 = nn.Conv2d(1, channels[0], 3, stride=1, bias=False)
-        self.dense1 = Dense(embed_dim, channels[0])
-        self.gnorm1 = nn.GroupNorm(4, num_channels=channels[0])
-        self.conv2 = nn.Conv2d(channels[0], channels[1], 3, stride=2, bias=False)
-        self.dense2 = Dense(embed_dim, channels[1])
-        self.gnorm2 = nn.GroupNorm(32, num_channels=channels[1])
-        self.conv3 = nn.Conv2d(channels[1], channels[2], 3, stride=2, bias=False)
-        self.dense3 = Dense(embed_dim, channels[2])
-        self.gnorm3 = nn.GroupNorm(32, num_channels=channels[2])
+        self.dense1 = Dense(embed_dim, base_dim)
+        # 初始卷积层
+        self.init_conv = nn.Sequential(
+            nn.Conv1d(in_channels, base_dim, 3, padding=1),
+            nn.BatchNorm1d(base_dim),
+            nn.ReLU()
+        )
 
-        # Decoding layers where the resolution increases
-        self.tconv3 = nn.ConvTranspose2d(channels[2], channels[1], 3, stride=2, bias=False, output_padding=1)
-        self.dense4 = Dense(embed_dim, channels[1])
-        self.tgnorm3 = nn.GroupNorm(32, num_channels=channels[1])
-        self.tconv2 = nn.ConvTranspose2d(channels[1] + channels[1], channels[0], 3, stride=2, bias=False, output_padding=1)
-        self.dense5 = Dense(embed_dim, channels[0])
-        self.tgnorm2 = nn.GroupNorm(32, num_channels=channels[0])
-        self.tconv1 = nn.ConvTranspose2d(channels[0] + channels[0], 1, 3, stride=1)
+        # 下采样部分
+        self.down = nn.Sequential(
+            nn.Conv1d(base_dim, base_dim * 2, 3, stride=2, padding=1),
+            nn.BatchNorm1d(base_dim * 2),
+            nn.ReLU()
+        )
 
-        # The swish activation function
-        self.act = lambda x: x * torch.sigmoid(x)
+        # 条件处理
+        self.cond_proj = nn.Conv1d(cond_channels, base_dim * 2, 1) # TODO: 这里可能是一个瓶颈
+        self.res_block = ResidualBlock(base_dim * 2, base_dim * 2)
+
+        # 上采样部分
+        self.up = nn.Sequential(
+            nn.ConvTranspose1d(base_dim * 2, base_dim, 3,
+                               stride=2, padding=1, output_padding=1),
+            nn.BatchNorm1d(base_dim),
+            nn.ReLU()
+        )
+
+        # 输出层
+        self.final_conv = nn.Conv1d(base_dim, in_channels, 3, padding=1)
         self.marginal_prob_std = marginal_prob_std
+        self.act = lambda x: x * torch.sigmoid(x)
 
-    def forward(self, x, t):
-        # Print input shapes
-        print("Input x shape:", x.shape)
-        print("Input t shape:", t.shape)
+    def forward(self, x, condition, t):
+        embed = self.act(self.embed(t))  # [B, embed_dim]
+        embed = self.dense1(embed)  # [B, base_dim, 1]
 
-        # Obtain the Gaussian random feature embedding for t
-        embed = self.act(self.embed(t))
-        print("Embedding shape:", embed.shape)
+        # 输入处理
+        B, N, T = x.shape
+        x = self.init_conv(x) + embed  # [B, 64, T]
 
-        # Encoding path
-        h1 = self.conv1(x)
-        print("After conv1 shape:", h1.shape)
-        # Incorporate information from t
-        h1 += self.dense1(embed)
-        print("After dense1 shape:", h1.shape)
-        # Group normalization
-        h1 = self.gnorm1(h1)
-        print("After gnorm1 shape:", h1.shape)
-        h1 = self.act(h1)
-        print("After activation1 shape:", h1.shape)
+        # 下采样
+        x_down = self.down(x)  # [B, 128, T//2]
 
-        h2 = self.conv2(h1)
-        print("After conv2 shape:", h2.shape)
-        h2 += self.dense2(embed)
-        print("After dense2 shape:", h2.shape)
-        h2 = self.gnorm2(h2)
-        print("After gnorm2 shape:", h2.shape)
-        h2 = self.act(h2)
-        print("After activation2 shape:", h2.shape)
+        # 条件处理
+        # condition shape [B,9*26,T]
+        cond = self.cond_proj(F.avg_pool1d(condition, 2))  # [B, 128, T//2]
 
-        h3 = self.conv3(h2)
-        print("After conv3 shape:", h3.shape)
-        h3 += self.dense3(embed)
-        print("After dense3 shape:", h3.shape)
-        h3 = self.gnorm3(h3)
-        print("After gnorm3 shape:", h3.shape)
-        h3 = self.act(h3)
-        print("After activation3 shape:", h3.shape)
+        # 残差块+交叉注意力
+        x_down = self.res_block(x_down, cond)
 
-        # Decoding path
-        h = self.tconv3(h3)
-        print("After tconv3 shape:", h.shape)
-        # Skip connection from the encoding path
-        h += self.dense4(embed)
-        print("After dense4 shape:", h.shape)
-        h = self.tgnorm3(h)
-        print("After tgnorm3 shape:", h.shape)
-        h = self.act(h)
-        print("After activation4 shape:", h.shape)
+        # 上采样
+        x_up = self.up(x_down)  # [B, 64, T]
 
-        h = self.tconv2(torch.cat([h, h2], dim=1))
-        print("After tconv2 shape:", h.shape)
-        h += self.dense5(embed)
-        print("After dense5 shape:", h.shape)
-        h = self.tgnorm2(h)
-        print("After tgnorm2 shape:", h.shape)
-        h = self.act(h)
-        print("After activation5 shape:", h.shape)
+        # 跳过连接
+        x = x + x_up  # 融合浅层和深层特征 # [B, 64, T]
 
-        h = self.tconv1(torch.cat([h, h1], dim=1))
-        print("After tconv1 shape:", h.shape)
+        # 最终输出 shape [B,9,T]
+        return self.final_conv(x) / self.marginal_prob_std(t)[:, None, None]
 
-        # Normalize output
-        h = h / self.marginal_prob_std(t)[:, None, None, None]
-        print("After normalization shape:", h.shape)
-
-        return h
-
-
-
-
-
-
-
-def marginal_prob_std(t, sigma, device):
+def marginal_prob_mean(t, sigma):
     """Compute the mean and standard deviation of $p_{0t}(x(t) | x(0))$.
 
     Args:
@@ -166,11 +172,28 @@ def marginal_prob_std(t, sigma, device):
     Returns:
       The standard deviation.
     """
-    t = torch.tensor(t, device=device)
+
+    return torch.tensor(0)
+
+
+
+
+
+def marginal_prob_std(t, sigma):
+    """Compute the mean and standard deviation of $p_{0t}(x(t) | x(0))$.
+
+    Args:
+      t: A vector of time steps.
+      sigma: The $\sigma$ in our SDE.
+
+    Returns:
+      The standard deviation.
+    """
+    t = torch.tensor(t)
     return torch.sqrt((sigma ** (2 * t) - 1.) / 2. / np.log(sigma))
 
 
-def diffusion_coeff(t, sigma, device):
+def diffusion_coeff(t, sigma):
     """Compute the diffusion coefficient of our SDE.
 
     Args:
@@ -180,93 +203,141 @@ def diffusion_coeff(t, sigma, device):
     Returns:
       The vector of diffusion coefficients.
     """
-    return torch.tensor(sigma ** t, device=device)
+    return torch.tensor(0), torch.tensor(sigma ** t)
 
 
 
 
 #@title Define the loss function (double click to expand or collapse)
 
-def loss_fn(model, x, marginal_prob_std, eps=1e-5):
-  """The loss function for training score-based generative models.
+def loss_fn(model, x, condition, prob_mean, prob_std, eps=1e-5):
+    """The loss function for training score-based generative models.
 
-  Args:
+    Args:
     model: A PyTorch model instance that represents a
       time-dependent score-based model.
     x: A mini-batch of training data.
     marginal_prob_std: A function that gives the standard deviation of
       the perturbation kernel.
     eps: A tolerance value for numerical stability.
-  """
-  random_t = torch.rand(x.shape[0], device=x.device) * (1. - eps) + eps
-  z = torch.randn_like(x)
-  std = marginal_prob_std(random_t)
-  perturbed_x = x + z * std[:, None, None, None]
-  score = model(perturbed_x, random_t)
-  loss = torch.mean(torch.sum((score * std[:, None, None, None] + z)**2, dim=(1,2,3)))
-  return loss
+    """
+    # x [B,9,96]
+    random_t = torch.rand(x.shape[0], device=x.device) * (1. - eps) + eps
+    z = torch.randn_like(x) # z [B,9,96]
+    mean_ = prob_mean(random_t)
+    std = prob_std(random_t)
+    perturbed_x = x + z * std[:, None, None] # perturbed_x [B,9,96]
+    score = model(perturbed_x, condition, random_t) # score [B,9,96]
+    loss = torch.mean(torch.sum((score * std[:, None, None] + z)**2, dim=(1, 2)))
+    return loss
 
 
 if __name__ == '__main__':
-    # Set random seed for reproducibility
-    torch.manual_seed(42)
-    #@title Training (double click to expand or collapse)
+    fix_seed = 2024
+    random.seed(fix_seed)
+    torch.manual_seed(fix_seed)
+    np.random.seed(fix_seed)
 
-    # 如果cuda不可用，将device设置为cpu
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    sigma = 25.0  # @param {'type':'number'}
-    marginal_prob_std_fn = functools.partial(marginal_prob_std, sigma=sigma, device=device)
-    diffusion_coeff_fn = functools.partial(diffusion_coeff, sigma=sigma, device=device)
-    score_model = ScoreNet(marginal_prob_std=marginal_prob_std_fn)
-    score_model = score_model.to(device)
+    class Config:
+        def __init__(self):
+            self.train_epochs = 50
+            self.in_channels = 26
+            self.hidden_channels = 16
+            self.out_channels = 1
+            self.timestep_max = 96
+            self.nb_blocks = 2
+            self.channels_last = False
+            self.show_scores = False
+            self.task_name = 'KGformer'
+            self.seq_len = 96
+            self.label_len = 48
+            self.pred_len = 96
+            self.num_nodes = 9
+            self.learning_rate = 0.0001
+            self.batch_size = 64
 
-    n_epochs = 50#@param {'type':'integer'}
-    ## size of a mini-batch
-    batch_size = 64 #@param {'type':'integer'}
-    ## learning rate
-    lr = 1e-4 #@param {'type':'number'}
+            self.cond_channels = 26 * 9
 
-
-
-    def generate_data(N, T, num_samples):
-        # 生成基础信号部分 (利用广播机制)
-        k = np.arange(1, N + 1)[:, None]  # 形状 (N, 1)
-        t = np.arange(T) * np.pi / 48  # 形状 (T,)
-
-        # 计算正弦信号 (N, T)
-        signal = k * np.sin(t)  # 广播乘法
-
-        # 添加通道维度并扩展样本维度 (1, N, T) -> (num_samples, 1, N, T)
-        signal = signal.reshape(1, 1, N, T)
-        signal = np.repeat(signal, num_samples, axis=0)
-
-        # 生成噪声 (num_samples, 1, N, T)
-        noise = np.random.normal(0, 0.1, (num_samples, 1, N, T))
-
-        # 合并信号和噪声
-        data = signal + noise
-
-        return torch.tensor(data, dtype=torch.float32)
-
-
-    # 示例：生成数据
-    data = generate_data(N=9, T=96, num_samples=1000)
-    print(data.shape)  # 输出应为 [1000, 1, 9, 96]
-    dataset = TensorDataset(data)
-    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-
-    optimizer = Adam(score_model.parameters(), lr=lr)
-    tqdm_epoch = tqdm(range(n_epochs))
+    args_withKG = Config()
+    # 设置SDE参数
+    sigma = 25.0
+    marginal_prob_mean_fn = functools.partial(marginal_prob_mean, sigma=sigma)
+    marginal_prob_std_fn = functools.partial(marginal_prob_std, sigma=sigma)
+    diffusion_coeff_fn = functools.partial(diffusion_coeff, sigma=sigma)
+    # 设置检查点路径和文件名前缀
+    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_3.pt"
+    checkpoint_withKG = torch.load(checkpoint_path_withKG)
     # 保存模型的路径
-    models_file_path = 'sde_checkpoints'  # 保存模型的目录
-    os.makedirs(models_file_path, exist_ok=True)  # 创建目录（如果不存在）
+    sde_model_dir = '/home/hjh/WindPowerForecast/sde_checkpoints'  # 保存模型的目录
+    if not os.path.exists(sde_model_dir):
+        os.makedirs(sde_model_dir)
+    # 设置GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+    # 模型定义和训练
+    model_withKG = Model(args_withKG).to(device)
+
+    model_withKG.load_state_dict(checkpoint_withKG['model_state_dict'])
+
+    valiset = Dataset_KGraph(flag='test')
+    vali_loader = DataLoader(valiset, batch_size=args_withKG.batch_size, shuffle=False, drop_last=True)
+
+    model_withKG.eval()
+    erros = []
+    conditions = []
+    with torch.no_grad():
+        for i, (batch_x, batch_y, batch_adj, batch_em_x, batch_em_y) in enumerate(vali_loader):
+
+            batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args_withKG.pred_len:] # 舍弃历史的天气预测信息，只用未来的天气预测信息与历史的功率信息
+            # batch_x shape [B,6,9,pre_len]
+
+            batch_x_withKG = torch.cat([batch_x, batch_em_y[:, :, :, -args_withKG.pred_len:]], dim=1) # 补上未来的台风预报的语义嵌入，增加20维
+            batch_x_withKG = batch_x_withKG.float().to(device)  # batch_x_withKG shape [B,26,9,pre_len]
+
+            batch_y = batch_y.float().to(device)
+            batch_adj = batch_adj.float().to(device)
+            batch_adj_hat = torch.zeros_like(batch_adj).float().to(device)
+            ########################################################
+            outputs_withKG = model_withKG(batch_x_withKG, batch_adj, batch_adj_hat)
+            batch_y = batch_y[:, -1, :, -args_withKG.pred_len:].to(device)
+            outputs_withKG = outputs_withKG.detach().cpu().numpy()
+            batch_y = batch_y.detach().cpu().numpy() # batch_y shape [B,9,pre_len]
+
+            if valiset.scale:
+                outputs_withKG = valiset.inverse_transform(outputs_withKG)
+                batch_y = valiset.inverse_transform(batch_y)
+
+            pred_withKG = outputs_withKG #[B,9,pre_len]
+            true = batch_y
+            # 收集预测误差、条件
+            # 计算预测误差
+            erro = true - pred_withKG
+            condition_ = batch_x_withKG.detach().cpu().numpy() #[B,26,9,pre_len]
+            # 把条件中的历史功率替换成预测功率
+            condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(pred_withKG, axis=1), condition_[:, 6:, :, :]], axis=1)
+            # [B,26,9,pre_len]
+            erros.append(erro)
+            conditions.append(condition)
+    # 将预测误差和条件转换为张量
+    erros = torch.tensor(np.concatenate(erros, axis=0)) #[B,9,pre_len]
+    conditions = torch.tensor(np.concatenate(conditions, axis=0)) #[B,26,9,pre_len]
+
+    dataset = TensorDataset(erros, conditions)
+    data_loader = DataLoader(dataset, batch_size=args_withKG.batch_size, shuffle=True)
+
+    score_model = ScoreNet(marginal_prob_std=marginal_prob_std_fn, cond_channels=args_withKG.cond_channels).to(device)
+    optimizer = Adam(score_model.parameters(), lr=args_withKG.learning_rate)
+    tqdm_epoch = tqdm(range(args_withKG.train_epochs))
+
 
     for epoch in tqdm_epoch:
         avg_loss = 0.
         num_items = 0
-        for x in data_loader:
-            x = x[0].to(device)
-            loss = loss_fn(score_model, x, marginal_prob_std_fn)
+        for i, (x, condition_) in enumerate(data_loader):
+            x = x.to(device) # x shape [B,9,pred_len]
+            # condition_ shape [B, 9, 26, pred_len]
+            condition = condition_.reshape(condition_.shape[0], -1, condition_.shape[3]).to(device) # condition shape [B, 9*26, pred_len]
+            loss = loss_fn(model=score_model, x=x, condition=condition, prob_mean=marginal_prob_mean_fn, prob_std=marginal_prob_std_fn)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -275,6 +346,9 @@ if __name__ == '__main__':
         # Print the averaged training loss so far.
         tqdm_epoch.set_description('Average Loss: {:5f}'.format(avg_loss / num_items))
         # Update the checkpoint after each epoch of training.
-        models_path = os.path.join(models_file_path, f'sde_{epoch}.pth')
+        models_path = os.path.join(sde_model_dir, f'sde_{epoch}.pth')
         torch.save(score_model.state_dict(), models_path)
+
+
+
 

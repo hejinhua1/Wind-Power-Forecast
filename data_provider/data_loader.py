@@ -644,7 +644,7 @@ class Dataset_KGraph(Dataset):
             df_stamp['hour'] = df_stamp.date.apply(lambda row: row.hour, 1)
             df_stamp['minute'] = df_stamp.date.apply(lambda row: row.minute, 1)
             df_stamp['minute'] = df_stamp.minute.map(lambda x: x // 15)
-            data_stamp = df_stamp.drop(['date'], 1).values
+            data_stamp = df_stamp.drop(['date'], axis=1).values
         elif self.timeenc == 1:
             data_stamp = time_features(pd.to_datetime(df_stamp['date'].values), freq=self.freq)
             data_stamp = data_stamp.transpose(1, 0)
@@ -662,11 +662,13 @@ class Dataset_KGraph(Dataset):
         data = np.array(all_data) # shape: [num_station, num_time, num_feature]
         self.data_x = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
         self.data_y = data.transpose((2, 0, 1)) # shape: [num_feature, num_station, num_time]
+        # 上面的特征维度为9，包括 ['wind_speed', 'wind_direction', 'temperature', 'humidity',
+        #        'air_pressure', 'power_unit', 'entity1', 'relation', 'entity2']
 
 
         # if self.set_type == 0 and self.args.augmentation_ratio > 0:
         #     self.data_x, self.data_y, augmentation_tags = run_augmentation_single(self.data_x, self.data_y, self.args)
-
+        # data_stamp没有用到，后期可以加进去
         self.data_stamp = data_stamp
 
 
@@ -678,8 +680,11 @@ class Dataset_KGraph(Dataset):
         r_begin = s_end - self.label_len
         r_end = r_begin + self.label_len + self.pred_len
 
-        seq_x = self.data_x[:-3, :, s_begin:s_end]
+        seq_x = self.data_x[:-3, :, s_begin:s_end] # 取了6个特征维度，包括 ['wind_speed', 'wind_direction', 'temperature', 'humidity',
+        #        'air_pressure', 'power_unit']
+        # seq_x shape [6,9,seq_len]
         seq_y = self.data_y[:-3, :, r_begin:r_end]
+        # seq_y shape [6,9,self.label_len + self.pred_len]
         adj = self.const.adj_mx
 
         embedding_head_id_x = self.data_x[-3, :, s_begin:s_end]
@@ -694,8 +699,8 @@ class Dataset_KGraph(Dataset):
 
         embedding_x = torch.cat([embedding_head_x, embedding_relation_x], dim=2)
         embedding_y = torch.cat([embedding_head_y, embedding_relation_y], dim=2)
-        embedding_x = embedding_x.permute(2, 0, 1).data.numpy()
-        embedding_y = embedding_y.permute(2, 0, 1).data.numpy()
+        embedding_x = embedding_x.permute(2, 0, 1).data.numpy() # shape [20,9,96], 来自于头节点和关系向量的合并
+        embedding_y = embedding_y.permute(2, 0, 1).data.numpy() # shape [20,9,144]
         return seq_x, seq_y, adj, embedding_x, embedding_y
 
     def __len__(self):

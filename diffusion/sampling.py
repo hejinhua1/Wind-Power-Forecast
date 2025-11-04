@@ -14,8 +14,7 @@ from torchvision.datasets import MNIST
 from tqdm import tqdm
 from scipy import integrate
 import os
-from diffusion_sde_test import marginal_prob_mean, marginal_prob_std, diffusion_coeff
-from diffusion_sde_test import ScoreNet
+from diffusion_sde import marginal_prob_mean, marginal_prob_std, diffusion_coeff, ScoreNet
 import matplotlib.pyplot as plt
 
 import sys
@@ -37,6 +36,8 @@ import math
 plt.switch_backend('agg')
 warnings.filterwarnings('ignore')
 
+
+# 简单sde的采样
 
 def Euler_Maruyama_sampler(score_model,
                            marginal_prob_mean,
@@ -72,9 +73,8 @@ def Euler_Maruyama_sampler(score_model,
     with torch.no_grad():
         for time_step in tqdm(time_steps):
             batch_time_step = torch.ones(batch_size, device=device) * time_step
-            alpha = 0.1 + 19.9 * batch_time_step
             f, g = diffusion_coeff(batch_time_step)
-            mean_x = x + (alpha[:, None, None] * x + (g ** 2)[:, None, None] * score_model(x, batch_condition, batch_time_step)) * step_size
+            mean_x = x + ((g ** 2)[:, None, None] * score_model(x, batch_condition, batch_time_step)) * step_size
             x = mean_x + torch.sqrt(step_size) * g[:, None, None] * torch.randn_like(x)
             # Do not include any noise in the last sampling step.
     return mean_x
