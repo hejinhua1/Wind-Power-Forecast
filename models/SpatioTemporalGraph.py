@@ -26,9 +26,9 @@ class GraphAttention(torch.nn.Module):
         time_filter: size of the time filter (t)
 
         @Inputs
-        x: tensor of shape (B, C, N, T) [Traffic Data]
-        a: tensor of shape (B, N, N) [Distance Information]
-        a_hat: tensor of shape (B, N, N) [Estimated Causality Information]
+        x: tensor of shape (B, C, N, T)
+        a: tensor of shape (B, N, N)
+        a_hat: tensor of shape (B, N, N)
 
         @Outputs
         out: tensor of shape (B, C', N, T')
@@ -135,9 +135,9 @@ class MultiHeadGraphAttention(torch.nn.Module):
         timestep_max: number of time steps (T)
 
         @Inputs
-        x: tensor of shape (B, C, N, T) [Traffic Data]
-        a: tensor of shape (B, N, N) [Distance Information]
-        a_hat: tensor of shape (B, N, N) [Estimated Causality Information]
+        x: tensor of shape (B, C, N, T)
+        a: tensor of shape (B, N, N)
+        a_hat: tensor of shape (B, N, N)
 
         @Outputs
         out: tensor of shape (B, C', N, T')
@@ -219,21 +219,6 @@ class MultiHeadGraphAttention(torch.nn.Module):
 class Model(torch.nn.Module):
     def __init__(self, configs):
         """
-        @params
-        in_channels: number of input channels (C)
-        out_channels: number of output channels (C')
-        timestep_max: number of time steps (T)
-        nb_blocks: number of internal blocks
-        channels_last: if the channels are situated in the last dim
-        device: torch.Device (cpu, cuda, tpu)
-
-        @Inputs
-        x: tensor of shape (B, T, N, C) [Traffic Data]
-        a: tensor of shape (B, N, N) [Distance Information]
-        a_hat: tensor of shape (B, N, N) [Estimated Causality Information]
-
-        @Outputs
-        out: tensor of shape (B, T', N, C')
         """
         super(Model, self).__init__()
         self.task_name = configs.task_name

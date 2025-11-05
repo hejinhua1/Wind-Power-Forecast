@@ -290,6 +290,7 @@ if __name__ == '__main__':
 
             batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args_withKG.pred_len:] # 舍弃历史的天气预测信息，只用未来的天气预测信息与历史的功率信息
             # batch_x shape [B,6,9,pre_len]
+            # batch_em_y shape [B,20,9,label_len+pre_len]
 
             batch_x_withKG = torch.cat([batch_x, batch_em_y[:, :, :, -args_withKG.pred_len:]], dim=1) # 补上未来的台风预报的语义嵌入，增加20维
             batch_x_withKG = batch_x_withKG.float().to(device)  # batch_x_withKG shape [B,26,9,pre_len]
