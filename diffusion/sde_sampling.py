@@ -44,7 +44,7 @@ def Euler_Maruyama_sampler(score_model,
                            prob_std,
                            diff_coeff,
                            batch_condition,
-                           batch_size=64,
+                           sample_size=64,
                            num_steps=500,
                            device='cuda',
                            eps=1e-3):
@@ -55,7 +55,7 @@ def Euler_Maruyama_sampler(score_model,
       marginal_prob_std: A function that gives the standard deviation of
         the perturbation kernel.
       diffusion_coeff: A function that gives the diffusion coefficient of the SDE.
-      batch_size: The number of samplers to generate by calling this function once.
+      sample_size: The number of samplers to generate by calling this function once.
       num_steps: The number of sampling steps.
         Equivalent to the number of discretized time steps.
       device: 'cuda' for running on GPUs, and 'cpu' for running on CPUs.
@@ -66,14 +66,14 @@ def Euler_Maruyama_sampler(score_model,
     """
     # 这里的batch_size 表示同一条预测曲线生成样本的数量
     # TODO：需要检查下对不对
-    t = torch.ones(batch_size, device=device)
-    init_x = torch.randn(batch_size, 9, 96, device=device) * prob_std(t)[:, None, None]
+    t = torch.ones(sample_size, device=device)
+    init_x = torch.randn(sample_size, 9, 96, device=device) * prob_std(t)[:, None, None]
     time_steps = torch.linspace(1., eps, num_steps, device=device)
     step_size = time_steps[0] - time_steps[1]
     x = init_x
     with torch.no_grad():
         for time_step in tqdm(time_steps):
-            batch_time_step = torch.ones(batch_size, device=device) * time_step
+            batch_time_step = torch.ones(sample_size, device=device) * time_step
             f, g = diff_coeff(batch_time_step)
             mean_x = x + ((g ** 2)[:, None, None] * score_model(x, batch_condition, batch_time_step)) * step_size
             x = mean_x + torch.sqrt(step_size) * g[:, None, None] * torch.randn_like(x)
@@ -103,7 +103,7 @@ if __name__ == '__main__':
             self.pred_len = 96
             self.num_nodes = 9
             self.learning_rate = 0.0001
-            self.batch_size = 1
+            self.batch_size = 95
 
             self.cond_channels = 26 * 9
 
@@ -138,8 +138,8 @@ if __name__ == '__main__':
     score_model.load_state_dict(sde_checkpoint)
     sampler = Euler_Maruyama_sampler
 
-    # valiset = Dataset_KGraph(flag='test')
-    valiset = Dataset_Typhoon_KGraph(flag='test') # TODO：这里台风数据集需要检查下
+    valiset = Dataset_KGraph(flag='test')
+    # valiset = Dataset_Typhoon_KGraph(flag='test') # TODO：这里台风数据集需要检查下
     vali_loader = DataLoader(valiset, batch_size=args_withKG.batch_size, shuffle=False, drop_last=True)
 
     model_withKG.eval()
@@ -149,19 +149,19 @@ if __name__ == '__main__':
         for i, (batch_x, batch_y, batch_adj, batch_em_x, batch_em_y) in enumerate(vali_loader):
             print('i:', i, 'total:', len(vali_loader))
             batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args_withKG.pred_len:]
-            # batch_x shape [1,6,9,pre_len]
-            # batch_em_y shape [1,20,9,label_len+pre_len]
+            # batch_x shape [B,6,9,pre_len]
+            # batch_em_y shape [B,20,9,label_len+pre_len]
 
             batch_x_withKG = torch.cat([batch_x, batch_em_y[:, :, :, -args_withKG.pred_len:]], dim=1)
             batch_x_withKG = batch_x_withKG.float().to(device)
-            # batch_x_withKG shape [1,26,9,pre_len]
+            # batch_x_withKG shape [B,26,9,pre_len]
 
-            batch_y = batch_y.float().to(device) # batch_y shape [1,6,9,label_len+pre_len]
+            batch_y = batch_y.float().to(device) # batch_y shape [B,6,9,label_len+pre_len]
             batch_adj = batch_adj.float().to(device)
             batch_adj_hat = torch.zeros_like(batch_adj).float().to(device)
             ########################################################
-            outputs_withKG = model_withKG(batch_x_withKG, batch_adj, batch_adj_hat) # outputs_withKG shape [1,9,pre_len]
-            batch_y = batch_y[:, -1, :, -args_withKG.pred_len:].to(device) # batch_y shape [1,9,pre_len]
+            outputs_withKG = model_withKG(batch_x_withKG, batch_adj, batch_adj_hat) # outputs_withKG shape [B,9,pre_len]
+            batch_y = batch_y[:, -1, :, -args_withKG.pred_len:].to(device) # batch_y shape [B,9,pre_len]
             outputs_withKG = outputs_withKG.detach().cpu().numpy()
             batch_y = batch_y.detach().cpu().numpy()
 
@@ -169,20 +169,21 @@ if __name__ == '__main__':
                 outputs_withKG = valiset.inverse_transform(outputs_withKG)
                 batch_y = valiset.inverse_transform(batch_y)
 
-            pred_withKG = outputs_withKG  #[1, 9, 96]
-            true = batch_y  #[1, 9, 96]
+            pred_withKG = outputs_withKG  #[B, 9, 96]
+            true = batch_y  #[B, 9, 96]
             # 收集预测误差、条件
             # 计算预测误差
             erro = true - pred_withKG
-            condition_ = batch_x_withKG.detach().cpu().numpy() # condition_ shape [1,26,9,pre_len]
+            condition_ = batch_x_withKG.detach().cpu().numpy() # condition_ shape [B,26,9,pre_len]
             # 0-4维度表示天气预测，第5维度表示功率历史值，第6-25维度表示台风路径嵌入
             if args_withKG.batch_size == 1:
                 # 将第5维度的功率历史值替换为预测值
                 condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(np.expand_dims(pred_withKG, axis=0), axis=0), condition_[:, 6:, :, :]], axis=1)
-                # condition shape [1,26,9,pre_len]
+                # condition shape [B,26,9,pre_len]
             else:
                 condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(pred_withKG, axis=1), condition_[:, 6:, :, :]], axis=1)
-            condition = torch.from_numpy(condition).float().to(device)
+            condition = torch.from_numpy(condition[:1, :, :, :]).float().to(device)
+            # condition shape [1,26,9,pre_len]
             # 同一个预测值条件下，进行多次采样，以获得误差分布，这里是采样sample_batch_size次
             batch_condition = condition.repeat(sample_batch_size, 1, 1, 1) # batch_condition shape [sample_batch_size,26,9,pre_len]
             batch_condition = batch_condition.reshape(batch_condition.shape[0], -1, batch_condition.shape[3])
@@ -194,7 +195,7 @@ if __name__ == '__main__':
                               prob_std=marginal_prob_std_fn,
                               diff_coeff=diffusion_coeff_fn,
                               batch_condition=batch_condition,
-                              batch_size=sample_batch_size,
+                              sample_size=sample_batch_size,
                               num_steps=num_steps,
                               device='cuda')
 

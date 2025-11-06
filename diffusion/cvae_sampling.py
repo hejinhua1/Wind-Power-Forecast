@@ -145,16 +145,19 @@ if __name__ == '__main__':
         for i, (batch_x, batch_y, batch_adj, batch_em_x, batch_em_y) in enumerate(vali_loader):
             print('i:', i, 'total:', len(vali_loader))
             batch_x[:, :-1, :, :] = batch_y[:, :-1, :, -args_withKG.pred_len:]
+            # batch_x shape [B,6,9,pre_len]
+            # batch_em_y shape [B,20,9,label_len+pre_len]
 
             batch_x_withKG = torch.cat([batch_x, batch_em_y[:, :, :, -args_withKG.pred_len:]], dim=1)
             batch_x_withKG = batch_x_withKG.float().to(device)
+            # batch_x_withKG shape [B,26,9,pre_len]
 
-            batch_y = batch_y.float().to(device)
+            batch_y = batch_y.float().to(device) # batch_y shape [B,6,9,label_len+pre_len]
             batch_adj = batch_adj.float().to(device)
             batch_adj_hat = torch.zeros_like(batch_adj).float().to(device)
             ########################################################
-            outputs_withKG = model_withKG(batch_x_withKG, batch_adj, batch_adj_hat)
-            batch_y = batch_y[:, -1, :, -args_withKG.pred_len:].to(device)
+            outputs_withKG = model_withKG(batch_x_withKG, batch_adj, batch_adj_hat) # outputs_withKG shape [B,9,pre_len]
+            batch_y = batch_y[:, -1, :, -args_withKG.pred_len:].to(device) # batch_y shape [B,9,pre_len]
             outputs_withKG = outputs_withKG.detach().cpu().numpy()
             batch_y = batch_y.detach().cpu().numpy()
 
@@ -162,16 +165,18 @@ if __name__ == '__main__':
                 outputs_withKG = valiset.inverse_transform(outputs_withKG)
                 batch_y = valiset.inverse_transform(batch_y)
 
-            pred_withKG = outputs_withKG  #[1, 9, 96]
-            true = batch_y  #[1, 9, 96]
+            pred_withKG = outputs_withKG  #[B, 9, 96]
+            true = batch_y  #[B, 9, 96]
             # 收集预测误差、条件
             # 计算预测误差
             erro = true - pred_withKG
-            condition_ = batch_x_withKG.detach().cpu().numpy()
+            condition_ = batch_x_withKG.detach().cpu().numpy() # condition_ shape [B,26,9,pre_len]
+            # 0-4维度表示天气预测，第5维度表示功率历史值，第6-25维度表示台风路径嵌入
             if args_withKG.batch_size == 1:
                 condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(np.expand_dims(pred_withKG, axis=0), axis=0), condition_[:, 6:, :, :]], axis=1)
             else:
                 condition = np.concatenate([condition_[:, :5, :, :], np.expand_dims(pred_withKG, axis=1), condition_[:, 6:, :, :]], axis=1)
+                # condition shape [B,26,9,pre_len]
             condition = torch.from_numpy(condition).float().to(device)
 
 
@@ -183,14 +188,14 @@ if __name__ == '__main__':
                 z_cond = torch.cat([z, batch_conditioning], dim=1)
                 samples = cvae_model.decoder(z_cond).view(args_withKG.batch_size, 9, 96)
 
-                errors = samples.clamp(-0.5, 0.5)  #[batch_size, 9, 96]
+                errors = samples.clamp(-0.5, 0.5)  #[B, 9, 96]
 
-                final_pred = pred_withKG + errors.detach().cpu().numpy() #[batch_size, 9, 96]
+                final_pred = pred_withKG + errors.detach().cpu().numpy() #[B, 9, 96]
                 final_pred_samples.append(final_pred)
 
-            final_pred_samples = np.array(final_pred_samples)  #[50, batch_size, 9, 96]
-            final_pred = final_pred_samples.mean(axis=0)  #[batch_size, 9, 96]
-            final_true = true  #[batch_size, 9, 96]
+            final_pred_samples = np.array(final_pred_samples)  #[sample_batch_size, B, 9, 96]
+            final_pred = final_pred_samples.mean(axis=0)  #[B, 9, 96]
+            final_true = true  #[B, 9, 96]
 
             for windfarm in range(9):
                 plt.figure()
