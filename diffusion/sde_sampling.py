@@ -109,7 +109,7 @@ if __name__ == '__main__':
 
     args_withKG = Config()
     num_steps = 500
-    sample_batch_size = 100
+    sample_batch_size = 50
     # 设置SDE参数
     sigma = 25.0
     marginal_prob_mean_fn = functools.partial(marginal_prob_mean, sigma=sigma)
@@ -119,8 +119,8 @@ if __name__ == '__main__':
     sde_result_dir = '/home/hjh/WindPowerForecast/test_results/sde'
     if not os.path.exists(sde_result_dir):
         os.makedirs(sde_result_dir)
-    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_3.pt"
-    sde_model_path = '/home/hjh/WindPowerForecast/sde_checkpoints/sde_50.pth'
+    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_1.pt"
+    sde_model_path = '/home/hjh/WindPowerForecast/sde_checkpoints/sde_10.pth'
     checkpoint_withKG = torch.load(checkpoint_path_withKG)
     # 保存模型的路径
     sde_model_dir = '/home/hjh/WindPowerForecast/sde_checkpoints'  # 保存模型的目录
@@ -170,10 +170,9 @@ if __name__ == '__main__':
                 batch_y = valiset.inverse_transform(batch_y)
 
             pred_withKG = outputs_withKG  #[B, 9, 96]
+            pred_withKG = np.clip(outputs_withKG, 0, 1)  # 对点预测结果进行裁剪，确保在0-1之间
             true = batch_y  #[B, 9, 96]
-            # 收集预测误差、条件
-            # 计算预测误差
-            erro = true - pred_withKG
+
             condition_ = batch_x_withKG.detach().cpu().numpy() # condition_ shape [B,26,9,pre_len]
             # 0-4维度表示天气预测，第5维度表示功率历史值，第6-25维度表示台风路径嵌入
             if args_withKG.batch_size == 1:
@@ -201,7 +200,8 @@ if __name__ == '__main__':
 
             errors = samples.clamp(-0.5, 0.5)  #[sample_batch_size, 9, 96]
 
-            final_pred_samples = pred_withKG + errors.detach().cpu().numpy() #[sample_batch_size, 9, 96]
+            final_pred_samples = pred_withKG[:1, :, :] + errors.detach().cpu().numpy() #[sample_batch_size, 9, 96]
+            final_pred_samples = np.clip(final_pred_samples, 0, 1)  # 对最终预测结果进行裁剪，确保在0-1之间
             final_pred = final_pred_samples.mean(axis=0)  #[9, 96]
             final_true = true[0, :, :]  #[9, 96]
 

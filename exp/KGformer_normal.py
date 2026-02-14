@@ -25,7 +25,7 @@ if __name__ == '__main__':
         def __init__(self):
             self.train_epochs = 10
             self.in_channels = 26
-            self.hidden_channels = 96
+            self.hidden_channels = 16
             self.out_channels = 1
             self.timestep_max = 96
             self.nb_blocks = 2
@@ -36,7 +36,7 @@ if __name__ == '__main__':
             self.label_len = 48
             self.pred_len = 96
             self.num_nodes = 9
-            self.learning_rate = 0.0001
+            self.learning_rate = 0.001
             self.batch_size = 32
 
     args = Config()
@@ -55,14 +55,15 @@ if __name__ == '__main__':
     formatted_datetime = current_datetime.strftime('%Y-%m-%d %H')
 
     # 设置GPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
     # 模型定义和训练
     model = Model(args).to(device)
     opt = optim.Adam(model.parameters(), lr=args.learning_rate)
 
     lr_scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.train_epochs, verbose=True)
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()
+    criterion = torch.nn.SmoothL1Loss()
 
     time_now = time.time()
     trainset = Dataset_KGraph(flag='train')
@@ -135,6 +136,8 @@ if __name__ == '__main__':
                     outputs = valiset.inverse_transform(outputs)
                     batch_y = valiset.inverse_transform(batch_y)
 
+                # 将输出限制在0-1之间
+                outputs = np.clip(outputs, 0, 1)
                 pred = outputs
                 true = batch_y
 
@@ -148,20 +151,6 @@ if __name__ == '__main__':
                     pd = np.concatenate((input[0, 5, -1, :], pred[0, -1, :]), axis=0) # 取最后一个风电场的风电功率
                     visual(gt, pd, os.path.join(result_path, str(i) + '.pdf'))
             f.write('Iter: ' + str(epoch) + ' ' + time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()) + '\n')
-        lr_scheduler.step()
-        print("第%d个epoch的学习率：%f" % (epoch, opt.param_groups[0]['lr']))
-        if epoch % checkpoint_interval == 0:
-            # 保存模型检查点
-            checkpoint_name = checkpoint_prefix + datatype + '_epoch_' + str(epoch) + '.pt'
-            model_path = os.path.join(checkpoint_path, checkpoint_name)
-            torch.save({
-                'epoch': epoch,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': opt.state_dict(),
-                'train_loss': train_loss
-            }, model_path)
-            print('Checkpoint saved:', model_path)
-
 
         preds = np.concatenate(preds, axis=0)
         trues = np.concatenate(trues, axis=0)
@@ -177,6 +166,21 @@ if __name__ == '__main__':
         f.write(
             'rscore:{:.4f}, mae:{:.4f}, rmse:{:.4f}, mape:{:.4f}, mspe:{:.4f}'.format(rscore, mae, rmse, mape, mspe)
         )
+
+        lr_scheduler.step()
+        print("第%d个epoch的学习率：%f" % (epoch, opt.param_groups[0]['lr']))
+        if epoch % checkpoint_interval == 0:
+            # 保存模型检查点
+            checkpoint_name = checkpoint_prefix + datatype + '_epoch_' + str(epoch) + '.pt'
+            model_path = os.path.join(checkpoint_path, checkpoint_name)
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': opt.state_dict(),
+                'train_loss': train_loss
+            }, model_path)
+            print('Checkpoint saved:', model_path)
+
         f.write('\n')
         f.write('\n')
         f.close()

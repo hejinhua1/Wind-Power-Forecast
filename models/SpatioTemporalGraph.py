@@ -272,7 +272,10 @@ class Model(torch.nn.Module):
             x = x.transpose(3, 1)  # B, C', N, T' -> B, T', N, C'
 
         x = x.squeeze() # B, C', N, T' -> B, N, T'
-
+        # 在最终输出前添加Sigmoid，确保输出在0-1范围内
+        # x = torch.sigmoid(x)
+        # x = torch.tanh(x) * 0.5 + 0.5  # 映射到[0,1]
+        # x = torch.clamp(x, 0, 1)
         return x
 
 

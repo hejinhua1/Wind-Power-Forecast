@@ -116,15 +116,15 @@ if __name__ == '__main__':
     cvae_result_dir = '/home/hjh/WindPowerForecast/test_results/cvae'
     if not os.path.exists(cvae_result_dir):
         os.makedirs(cvae_result_dir)
-    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_3.pt"
-    cvae_model_path = '/home/hjh/WindPowerForecast/cvae_checkpoints/cvae_10.pth'
+    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_1.pt"
+    cvae_model_path = '/home/hjh/WindPowerForecast/cvae_checkpoints/cvae_1.pth'
     checkpoint_withKG = torch.load(checkpoint_path_withKG)
     # 保存模型的路径
     cvae_model_dir = '/home/hjh/WindPowerForecast/cvae_checkpoints'  # 保存模型的目录
     if not os.path.exists(cvae_model_dir):
         os.makedirs(cvae_model_dir)
     # 设置GPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
     # 模型定义和训练
     model_withKG = Model(args_withKG).to(device)
@@ -165,7 +165,7 @@ if __name__ == '__main__':
                 outputs_withKG = valiset.inverse_transform(outputs_withKG)
                 batch_y = valiset.inverse_transform(batch_y)
 
-            pred_withKG = outputs_withKG  #[B, 9, 96]
+            pred_withKG = np.clip(outputs_withKG, 0, 1)  #[B, 9, 96],# 对点预测结果进行裁剪，确保在0-1之间
             true = batch_y  #[B, 9, 96]
             # 收集预测误差、条件
             # 计算预测误差
@@ -191,6 +191,7 @@ if __name__ == '__main__':
                 errors = samples.clamp(-0.5, 0.5)  #[B, 9, 96]
 
                 final_pred = pred_withKG + errors.detach().cpu().numpy() #[B, 9, 96]
+                final_pred = np.clip(final_pred, 0, 1) # 对结果进行裁剪，输出在0-1之间
                 final_pred_samples.append(final_pred)
 
             final_pred_samples = np.array(final_pred_samples)  #[sample_batch_size, B, 9, 96]

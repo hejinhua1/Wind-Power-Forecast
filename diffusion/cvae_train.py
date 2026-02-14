@@ -114,14 +114,14 @@ if __name__ == '__main__':
 
     args_withKG = Config()
     # 设置检查点路径和文件名前缀
-    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_3.pt"
+    checkpoint_path_withKG = "/home/hjh/WindPowerForecast/checkpoints/KGformer_normal_epoch_1.pt"
     checkpoint_withKG = torch.load(checkpoint_path_withKG)
     # 保存模型的路径
     cvae_model_dir = '/home/hjh/WindPowerForecast/cvae_checkpoints'  # 保存模型的目录
     if not os.path.exists(cvae_model_dir):
         os.makedirs(cvae_model_dir)
     # 设置GPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
 
     # 模型定义和训练
     model_withKG = Model(args_withKG).to(device)
@@ -154,7 +154,7 @@ if __name__ == '__main__':
                 outputs_withKG = valiset.inverse_transform(outputs_withKG)
                 batch_y = valiset.inverse_transform(batch_y)
 
-            pred_withKG = outputs_withKG
+            pred_withKG = np.clip(outputs_withKG, 0, 1) # 对点预测结果进行裁剪，确保在0-1之间
             true = batch_y
             # 收集预测误差、条件
             # 计算预测误差
